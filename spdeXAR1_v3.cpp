@@ -116,7 +116,7 @@ Type objective_function<Type>::operator() ()
   SparseMatrix<Type> Q = R_inla::Q_spde(spdeMatrices, exp(ln_kappa));
 
   for( int t=0; t < n_t; t++){
-  	jnll += SCALE(GMRF(Q), 1.0 / exp(ln_tau_O))(eps_omega_st.col(t)); 
+    jnll += SCALE(GMRF(Q), 1.0 / exp(ln_tau_O))(eps_omega_st.col(t)); 
   }
   
   vector<Type> eps_i (Nobs);
@@ -157,7 +157,7 @@ Type objective_function<Type>::operator() ()
       if( !isNA(length_i(i)) ) jnll -= dlnorm( length_i(i), log(length_pred(i)) - pow(sigma, 2)/2, sigma, true );
     }
     if(CTL == 3){
-    	//Gamma:
+      //Gamma:
       if( !isNA(length_i(i)) ) jnll -= dgamma( length_i(i), 1/pow(exp(ln_cv),2), length_pred(i)*pow(exp(ln_cv),2), true ); 
     }
   }
