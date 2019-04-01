@@ -131,7 +131,7 @@ Type objective_function<Type>::operator() ()
      } else {
      eps_i(i) = rho * eps_omega_st((s_i(i), t_prev_i(i))) + 
        eps_omega_st((s_i(i), t_i(i))); 
-  	}
+    }
     
     omega = exp(ln_global_omega) +                         //intercept
   	        eta_fixed_i(i) +                               //fixed effects
