@@ -107,40 +107,36 @@ Data = list("Nobs"      = nrow(data), "length_i"=data$TL, "age_i" = data$Age,
 )
 
 
-Parameters = list( "ln_global_omega"  = log(13.28954),
-                   "ln_global_linf"   = log(55), 
-                   "ln_sd_linf"       = log(7.275452),
-									 
-                   "global_tzero"     = -1.260783461, 
-                   "ln_sd_tzero"      = log(0.538755), 
-                   "ln_b_sex"         = log(4.760871),
-                   "b_j_omega"        = rep(0, ncol(Data$X_ij_omega)),
-									 
-                   "eps_omega_st"    	= matrix(0,  nrow=mesh$n,ncol=Data$n_t ), 						 
-                   "eps_linf"         = rep(0,  length(unique(data$Lake))),
-									 "eps_t0"           = rep(0, length(unique(data$Lake))),  
-                   
-                   "ln_cv"            = -2.5043055,    
-									 "ln_kappa"         = -2,  	 
-									 "ln_tau_O"         = -5, 
-									 "rho_unscaled"     = 2 * plogis(0.6) - 1 # --> 2 * plogis(your_rho_guess) - 1
-									 )
+Parameters = list("ln_global_omega"  = log(13.28954),
+                  "ln_global_linf"   = log(55), 
+                  "ln_sd_linf"       = log(7.275452), 
+		  "global_tzero"     = -1.260783461, 
+                  "ln_sd_tzero"      = log(0.538755), 
+                  "ln_b_sex"         = log(4.760871),
+                  "b_j_omega"        = rep(0, ncol(Data$X_ij_omega)),							 
+                  "eps_omega_st"     = matrix(0,  nrow=mesh$n,ncol=Data$n_t ), 						 
+                  "eps_linf"         = rep(0,  length(unique(data$Lake))),
+		  "eps_t0"           = rep(0, length(unique(data$Lake))), 
+		  "ln_cv"            = -2.5043055,  
+		  "ln_kappa"         = -2, 
+		  "ln_tau_O"         = -5, 
+		  "rho_unscaled"     = 2 * plogis(0.6) - 1 # --> 2 * plogis(your_rho_guess) - 1
+)
 
 Random = c("eps_omega_st", "eps_linf", "eps_t0")  
 Use_REML = FALSE
 if( Use_REML==TRUE ) Random = union( Random, c("ln_global_omega", "ln_global_linf", 
                                     "global_tzero","ln_b_sex", "b_j_omega") )
 
-Obj <- MakeADFun(data=Data, parameters=Parameters, random=Random, hessian=FALSE, 
-                 map=NULL)
+Obj <- MakeADFun(data=Data, parameters=Parameters, random=Random, hessian=FALSE, map=NULL)
 
 Obj$fn( Obj$par )
 Obj$gr( Obj$par )
 
 #Runs in 4.3 minutes on my laptop 
 Opt  = TMBhelper::Optimize(obj=Obj,
-													 control=list(eval.max=1000, iter.max=1000),
-													 getsd=T, newtonsteps=1, bias.correct=F) 
+			   control=list(eval.max=1000, iter.max=1000), 
+			   getsd=T, newtonsteps=1, bias.correct=F) 
 
 Opt
 #estimates/standard errors appear reasonable
@@ -233,28 +229,16 @@ data <- left_join(data, Stats)
 p <- ggplot(data = data, aes(y = TL, x = Age))
 p <- p + xlab("Age") + ylab("Total Length (cm)")
 p <- p + geom_point(shape = 16, size = 1.0, position="jitter")
-p <- p + geom_ribbon(aes(x = Age, 
-												 ymax = fit.975, 
-												 ymin = fit.025),
-										 fill = grey(0.5),
-										 alpha = 0.5) 
-
-p <- p + geom_ribbon(aes(x = Age, 
-												 ymax = fit.25, 
-												 ymin = fit.75),
-										 fill = grey(1),
-										 alpha = 0.8) 
-
+p <- p + geom_ribbon(aes(x = Age, ymax = fit.975, ymin = fit.025), fill = grey(0.5), alpha = 0.5) 
+p <- p + geom_ribbon(aes(x = Age, ymax = fit.25, ymin = fit.75), fill = grey(1), alpha = 0.8) 
 p <- p + geom_line(aes(x = Age, y = fit.5), linetype = "dashed",  col="black", size=0.75)
-
 p <- p + scale_x_continuous(limits = c(-0.5, 27), breaks=c(0,6,11,16,21,26)) + 
-	       scale_y_continuous(limits = c(0, 86), breaks=c(0,20,40,60,80))
+	 scale_y_continuous(limits = c(0, 86), breaks=c(0,20,40,60,80))
 p <- p + ggthemes::theme_tufte() +
 	       theme(axis.line.x = element_line(colour = 'black', size=0.75, linetype='solid'),
-				       axis.line.y = element_line(colour = 'black', size=0.75, linetype='solid'), 
-	       			 axis.text=element_text(size=14, colour="black"),
-	       			 axis.title=element_text(size=20,face="bold")
-	       			 )
+		     axis.line.y = element_line(colour = 'black', size=0.75, linetype='solid'), 
+	             axis.text=element_text(size=14, colour="black"),
+	       	     axis.title=element_text(size=20,face="bold") )
 p
 
 ggsave("plots/PredictiveDistributionFit.png", p, dpi=600, width=9, height=8, units=c("in")) 
@@ -303,8 +287,8 @@ for(i in unique(data$WBID)){
 			eps_omega_st_i[which(data$WBID==i & data$Year==j)[1]]  
 
 		linf = global_linf + 
-			     b_sex*sub.sub.dat$SexCode[j] + 
-			     eps_linf[Lake] 
+			b_sex*sub.sub.dat$SexCode[j] + 
+			eps_linf[Lake] 
 
 		lpred_m <- lpred_f <- NA
 		for(a in 1:length(Age_Seq)){
@@ -313,7 +297,7 @@ for(i in unique(data$WBID)){
 		}
 		
 		plot(lpred_f~Age_Seq, type="l", col="black", ylim=c(0,85), main=paste(Name, j, sep= " " ), 
-				 xlab="Age (Years)", ylab="Total Length (cm)", cex.main=1, lwd=1.5)
+		     xlab="Age (Years)", ylab="Total Length (cm)", cex.main=1, lwd=1.5)
 		points(lpred_m~Age_Seq, type="l", col="steelblue", lwd=1.5)
 		points(sub.sub.dat$TL~sub.sub.dat$Age, pch=sub.sub.dat$SexCode)
 }}
@@ -348,13 +332,13 @@ dev.off()
 
 data$E2 <- (data$TL - rep$length_pred)^2 
 
-d <-   reshape2::melt(data$E2)            %>%
-       dplyr::mutate(WBID=data$WBID, 
-                     x = data$X_TTM_c/1000, 
-                     y = data$Y_TTM_c/1000, 
-                     year = data$Year, 
-                     eps = data$eps )	    %>%
-                     group_by(WBID, year) 
+d <-   reshape2::melt(data$E2)       %>%
+       mutate(WBID=data$WBID, 
+              x = data$X_TTM_c/1000, 
+              y = data$Y_TTM_c/1000, 
+              year = data$Year, 
+              eps = data$eps )	     %>%
+              group_by(WBID, year) 
 
 
 #Plot eps_i (st raneffs of the lakes) through time x Space:
@@ -374,9 +358,9 @@ ggsave("plots/omega_st_facet_year.png", p, dpi=600, width=11, height=8, units=c(
 
 #Now let's look at the SE of the field...
 d <- reshape2::melt(SEHat[["eps_omega_st"]]) %>%
-     dplyr::mutate(x = rep(mesh$loc[,1], ncol(SEHat[["eps_omega_st"]])),
-                   y = rep(mesh$loc[,2], ncol(SEHat[["eps_omega_st"]])), 
-                   year = col(SEHat[["eps_omega_st"]]))
+     mutate(x = rep(mesh$loc[,1], ncol(SEHat[["eps_omega_st"]])),
+            y = rep(mesh$loc[,2], ncol(SEHat[["eps_omega_st"]])), 
+            year = col(SEHat[["eps_omega_st"]]))
 
 #Plot the SEs through time-space
 p <- ggplot(d, aes(x, y, col = value)) + 
@@ -458,13 +442,13 @@ dev.off()
 
 #Plot RMSE through space-time --> for what they are worth
 
-d <-   reshape2::melt(data$E2)        %>%
-       dplyr::mutate(WBID=data$WBID, 
-                x = data$X_TTM_c/1000, 
-                y = data$Y_TTM_c/1000, 
-                year = data$Year, 
-                eps = data$eps )	    %>%
-         group_by(WBID, year)         %>% 
+d <-   reshape2::melt(data$E2)       %>%
+       mutate(WBID=data$WBID, 
+              x = data$X_TTM_c/1000, 
+              y = data$Y_TTM_c/1000, 
+              year = data$Year, 
+              eps = data$eps )	     %>%
+         group_by(WBID, year)        %>% 
          mutate(RMSE = sqrt(mean(value)), MSE=mean(value))
 
 ggplot(d, aes(x, y, col = RMSE)) + geom_point() +  
@@ -491,8 +475,7 @@ data$E1 <- (data$TL - length_pred)
 xyplot(data$E1 ~ rep$length_pred | data$Year,
 			 panel=function(x, y){ 
 			 panel.xyplot(x, y) 
-			 } 
-)
+			 } )
 #Okay-ish.
 
 #Residuals by lake:
@@ -500,8 +483,7 @@ xyplot(data$E1 ~ rep$length_pred | data$Name,
 			 panel=function(x, y){ 
 			 panel.xyplot(x, y) 
 			 	#panel.lmline(x, y, lty = 2)  
-			 } 
-) 
+			 } ) 
 #not the prettiest here -- definitely some patterns.
 
 # Homogeneity
@@ -517,31 +499,24 @@ hist(data$E1, main="", xlab="Residual")
 
 # Independence due to model misfit
 par(mfrow = c(1,1), mar = c(5,5,2,2), cex.lab = 1.5)
-plot(x = data$wallEffDen, 
-		 y = data$E1, xlab="Intraspecific Density", 
-		 ylab="Residual")
+plot(x = data$wallEffDen, y = data$E1, xlab="Intraspecific Density", ylab="Residual")
 abline(h = 0)
 #Doesn't appear to be any nonlinear tomfoolery afoot for walleye density
 
 # Independence due to model misfit
 par(mfrow = c(1,1), mar = c(5,5,2,2), cex.lab = 1.5)
-plot(x = data$compEffDen, 
-		 y = data$E1, xlab="Interspecific Density", 
-		 ylab="Residual")
+plot(x = data$compEffDen, y = data$E1, xlab="Interspecific Density", ylab="Residual")
 abline(h = 0)
 #Okay
 
 # Independence due to model misfit
 par(mfrow = c(1,1), mar = c(5,5,2,2), cex.lab = 1.5)
-plot(x = data$GDD, 
-		 y = data$E1, xlab="Growing Degree Days", 
-		 ylab="Residual")
+plot(x = data$GDD, y = data$E1, xlab="Growing Degree Days", ylab="Residual")
 abline(h = 0)
 
 # Independence due to model misfit
 par(mfrow = c(1,1), mar = c(5,5,2,2), cex.lab = 1.5)
-plot(x = data$Year, 
-		 y = data$E1, xlab="Year", ylab="Residual")
+plot(x = data$Year, y = data$E1, xlab="Year", ylab="Residual")
 abline(h = 0)
 
 #Residuals are getting a little broader through time, but 
@@ -560,9 +535,9 @@ abline(h = 0)
 
 #Lake specific omega vs. effective density:
 omegas <- global_omega + b_j_omega[1]*data$wallEffDen.Std + 
-	                       b_j_omega[2]*data$compEffDen.Std +  
-	                       b_j_omega[3]*data$GDD.Std + 
-	                       b_j_omega[4]*data$wallEffDen.Std*data$compEffDen.Std +
+	                 b_j_omega[2]*data$compEffDen.Std +  
+	                 b_j_omega[3]*data$GDD.Std + 
+	                 b_j_omega[4]*data$wallEffDen.Std*data$compEffDen.Std +
                          eps_omega_st_i
 data$omegas <- omegas
 
@@ -575,9 +550,7 @@ p
 p1 <- ggplot(data, aes(data$wallEffDen.Std, omegas)) + geom_point() +
 	    ylab("Growth Rate cm/year (Omega)") + xlab("Effective Walleye Density (IGNORES INTERACTION)") +
 	    facet_wrap(~Year) + 
-      geom_smooth(data = data, method="lm",
-                  aes(x = wallEffDen.Std, 
-                  y =  omegas))
+      geom_smooth(data = data, method="lm", aes(x = wallEffDen.Std, y =  omegas))
 p1 	
 #Omegas generally decline with increased conspecific density
 
@@ -589,9 +562,7 @@ p2
 #Omegas vs. GDD by year
 p3 <- ggplot(data, aes(data$GDD.Std, omegas)) + geom_point() +
 	    ylab("Growth Rate cm/year (Omega)") + xlab("GDD") +
-	    geom_smooth(data = data, method="lm",
-				    			aes(x = GDD.Std, 
-									y =  omegas)) +
+	    geom_smooth(data = data, method="lm", aes(x = GDD.Std, y =  omegas)) +
 	    facet_wrap(~Year)
 p3 
 
@@ -641,12 +612,9 @@ z.pred <- matrix(z.pred, nrow=grid.lines, ncol=grid.lines)
 png(file="plots/InteractionPlot.png",width=9.50,height=7.00,units="in",res=600)
 par(mfrow=c(1,1))
 scatter3D(x=data$wallEffDen.Std, y=data$compEffDen.Std, z = data$omegas, type="n", 
-					theta = 25, phi=17,
-					ticktype = "detailed", type="h",pch = data$pch, cex = 1, col=viridis(50),
-					xlab = "Intraspecific Density", ylab = "Interspecific Density", 
-					zlab = "Omega (Growth Rate)",
-					surf = list(x = x.pred, y = y.pred, z = z.pred,  
-										  facets = NA), main = "")
+	  theta = 25, phi=17, ticktype = "detailed", type="h",pch = data$pch, cex = 1, col=viridis(50),
+	  xlab = "Intraspecific Density", ylab = "Interspecific Density", zlab = "Omega (Growth Rate)",
+          surf = list(x = x.pred, y = y.pred, z = z.pred, facets = NA), main = "")
 
 dev.off()
 
@@ -682,9 +650,7 @@ d <- as.data.frame(rbind(d, d1))
 
 p <- ggplot()
 p <- p + geom_point(data = d,
-                    aes(x = Parameter, 
-                        y = MLE)
-)
+                    aes(x = Parameter, y = MLE) )
 
 p <- p + geom_errorbar(data = d,
                        aes(x = Parameter, 
