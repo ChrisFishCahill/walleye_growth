@@ -46,10 +46,6 @@ library(INLA)
 data <- readRDS("vB_analysis_march_2019_cahill.rds")
 data <- as.data.frame(data)
 
-Version = "spdeXAR1_v3"
-compile(paste0(Version, ".cpp"))
-dyn.load( dynlib(Version) )
-
 loc_xy <- unique(data[ ,c("X_TTM_c","Y_TTM_c") ] )
 loc_xy <- loc_xy/1000 #Put distance in kms
 
@@ -86,6 +82,10 @@ dev.off()
 #-------------------------------------------------------------------------------------------------------------------
 
 #Create the inputs for TMB and run the model
+
+Version = "spdeXAR1_v3"
+compile(paste0(Version, ".cpp"))
+dyn.load( dynlib(Version) )
 
 spde = inla.spde2.matern( mesh )
 
