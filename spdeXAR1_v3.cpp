@@ -125,15 +125,15 @@ Type objective_function<Type>::operator() ()
     Type linf  = 0; 
     Type t0    = 0; 
     Type sigma = 0;
-
-  	if (t_i(i) == Type(0)){
-  	  eps_i(i) = eps_omega_st( s_i(i), t_i(i) );
-  	} else {
-  	  eps_i(i) = rho * eps_omega_st((s_i(i), t_prev_i(i))) +
-  		            eps_omega_st((s_i(i), t_i(i))); 
+   
+    if (t_i(i) == Type(0)){
+     eps_i(i) = eps_omega_st( s_i(i), t_i(i) );
+     } else {
+     eps_i(i) = rho * eps_omega_st((s_i(i), t_prev_i(i))) + 
+       eps_omega_st((s_i(i), t_i(i))); 
   	}
-  	
-  	omega = exp(ln_global_omega) +                         //intercept
+    
+    omega = exp(ln_global_omega) +                         //intercept
   	        eta_fixed_i(i) +                               //fixed effects
    	        eps_i(i);                                      //AR-1 ST
     
