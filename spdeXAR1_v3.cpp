@@ -134,8 +134,8 @@ Type objective_function<Type>::operator() ()
     }
     
     omega = exp(ln_global_omega) +                         //intercept
-  	        eta_fixed_i(i) +                               //fixed effects
-   	        eps_i(i);                                      //AR-1 ST
+            eta_fixed_i(i) +                               //fixed effects
+            eps_i(i);                                      //AR-1 ST
     
     linf  = exp(ln_global_linf) +                          //intercept
             exp(ln_b_sex)*sex_i(i) +                       //sex effect
