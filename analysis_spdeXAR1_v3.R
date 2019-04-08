@@ -350,12 +350,15 @@ p
 
 ggsave("plots/omega_st_facet_year.png", p, dpi=600, width=11, height=8, units=c("in"))
 
+#plot mean-centered eps_i through time x space
 p <- group_by(d, year) %>%
-  mutate(eps = eps - mean(eps)) %>%
-  ggplot(aes(x, y, col =eps )) + geom_point() +
-  facet_wrap(~year) +
-  xlab("Easting (km)") + ylab("Northing (km)") +
-  scale_color_gradient2(limits = c(-0.01, 0.01))
+     mutate(eps = eps - mean(eps)) %>%
+     ggplot(aes(x, y, col =eps )) + geom_point() +
+     facet_wrap(~year) +
+     xlab("Easting (km)") + ylab("Northing (km)") +
+     scale_color_gradient2(limits = c(-0.01, 0.01))
+
+ggsave("plots/omega_st_mean_centered.png", p, dpi=600, width=11, height=8, units=c("in"))
 
 # So, the space random effects change through time, but are rather consistent in
 # a given year.  Interesting--perhaps because data don't support the more complex
