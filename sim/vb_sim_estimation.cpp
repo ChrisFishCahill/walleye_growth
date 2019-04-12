@@ -61,6 +61,7 @@ Type objective_function<Type>::operator() ()
   DATA_IVECTOR( t_prev_i );    //Random effect index for year(t-1)
 
   DATA_INTEGER( CTL );         //Control for likelihood
+  DATA_INTEGER(ar1);
 
   //Parameters
   PARAMETER(ln_global_omega);
@@ -114,22 +115,27 @@ Type objective_function<Type>::operator() ()
   // Probability of spatial-temporal random coefficients
   SparseMatrix<Type> Q = R_inla::Q_spde(spdeMatrices, exp(ln_kappa));
 
-  for( int t=0; t < n_t; t++){
-    jnll += SCALE(GMRF(Q), 1.0 / exp(ln_tau_O))(eps_omega_st.col(t));
+  if (ar1 == 0) {
+    for(int t=0; t < n_t; t++)
+      jnll += SCALE(GMRF(Q), 1.0 / exp(ln_tau_O))(eps_omega_st.col(t));
+  } else {
+    jnll += SCALE(SEPARABLE(AR1(rho), GMRF(Q)), 1.0 / exp(ln_tau_O))(eps_omega_st);
   }
 
-  for(int i=0; i<Nobs; i++){
+    for(int i=0; i<Nobs; i++){
     Type omega = 0;
     Type linf  = 0;
     Type t0    = 0;
     Type sigma = 0;
 
-    if (t_i(i) == Type(0)){
-      eps_i(i) = eps_omega_st( s_i(i), t_i(i) )*sqrt(1-rho*rho);
-    } else {
-      eps_i(i) = rho * eps_omega_st((s_i(i), t_prev_i(i))) + //previous raneff at location s*rho
-        eps_omega_st((s_i(i), t_i(i)));
-    }
+    // if (t_i(i) == Type(0)){
+    //   eps_i(i) = eps_omega_st( s_i(i), t_i(i) )*sqrt(1-rho*rho);
+    // } else {
+    //   eps_i(i) = rho * eps_omega_st((s_i(i), t_prev_i(i))) + //previous raneff at location s*rho
+    //     eps_omega_st((s_i(i), t_i(i)));
+    // }
+    eps_i(i) = eps_omega_st( s_i(i), t_i(i) );
+
 
     omega = exp(ln_global_omega) +                  //intercept
             eta_fixed_i(i) +                        //fixed effects

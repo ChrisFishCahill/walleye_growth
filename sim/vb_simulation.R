@@ -100,8 +100,8 @@ cv          <- 0.08
 Age_Range = 2:25
 
 Nfish       <- 100
-nstations   <- 50
-nyears      <- 20
+nstations   <- 30
+nyears      <- 10
 
 beta0       <- 12
 setwd("sim/")
@@ -174,16 +174,62 @@ Random = c("eps_linf", "eps_t0", "eps_omega_st")
 # Map[["rho_unscaled"]] = factor(NA)
 # Map[["eps_omega_st"]] = factor(matrix(NA,  nrow=mesh$n,ncol=Data$n_t ))
 
+Data$ar1 <- 1L
+Map <- list()
+if (Data$ar1 == 0L) Map[["rho_unscaled"]] = factor(NA)
 Obj <- MakeADFun(data=Data, parameters=Parameters, random=Random,
-	               hessian=FALSE, DLL=Version, map=NULL)
+  hessian=FALSE, DLL=Version,
+  map = Map)
 
 Obj$fn( Obj$par )
 Obj$gr( Obj$par )
 
-#4 minutes on my machine
+# Phased for a bit of a speed boost:
+# ---------------------------------
+# Phase 1: (fixed effects)
+
+Map <- list()
+Map[["ln_sd_linf"]] = factor(NA)
+Map[["eps_linf"]] = rep(factor(NA), length(Parameters$eps_linf))
+Map[["ln_sd_tzero"]] = factor(NA)
+Map[["eps_t0"]] = rep(factor(NA), length(Parameters$eps_t0))
+Map[["ln_kappa"]] = factor(NA)
+Map[["ln_tau_O"]] = factor(NA)
+Map[["rho_unscaled"]] = factor(NA)
+Map[["eps_omega_st"]] = factor(matrix(NA,  nrow=mesh$n,ncol=Data$n_t ))
+
+Obj <- MakeADFun(data=Data, parameters=Parameters, random=NULL,
+  hessian=FALSE, DLL=Version,
+  map = Map)
+
 Opt = TMBhelper::Optimize( obj=Obj,
-                           control=list(eval.max=1000, iter.max=1000),
-                           getsd=T, newtonsteps=1, bias.correct=F)
+  control=list(eval.max=1000, iter.max=1000),
+  getsd=T, newtonsteps=1, bias.correct=F)
+
+set_par_value <- function(opt, par) {
+  as.numeric(opt$par[par == names(opt$par)])
+}
+
+Parameters[["ln_global_omega"]] = set_par_value(Opt, "ln_global_omega")
+Parameters[["ln_global_linf"]] = set_par_value(Opt, "ln_global_linf")
+Parameters[["global_tzero"]] = set_par_value(Opt, "global_tzero")
+Parameters[["b_j_omega"]] = set_par_value(Opt, "b_j_omega")
+Parameters[["ln_cv"]] = set_par_value(Opt, "ln_cv")
+
+# ----------------------------------
+# Phase 2: (+ random effects)
+
+Map <- list()
+if (Data$ar1 == 0L) Map[["rho_unscaled"]] = factor(NA)
+
+Obj <- MakeADFun(data=Data, parameters=Parameters, random=Random,
+  hessian=FALSE, DLL=Version,
+  map = Map)
+
+Opt = TMBhelper::Optimize( obj=Obj,
+  control=list(eval.max=1000, iter.max=1000),
+  getsd=T, newtonsteps=1, bias.correct=F)
+
 Opt
 
 SD = sdreport( Obj )
@@ -209,13 +255,31 @@ d <-   reshape2::melt(DF$eps) %>%
 
 #plot mean-centered eps_i through time x space
 p <- group_by(d, year) %>%
-     mutate(eps = value - mean(value)) %>%
+     # mutate(eps = value - mean(value)) %>%
+     mutate(eps = value) %>%
      ggplot(aes(x, y, col =eps )) + geom_point() +
      facet_wrap(~year) +
      xlab("Easting (km)") + ylab("Northing (km)") +
-     scale_color_gradient2(limits = c(-0.01, 0.01))
+     scale_color_gradient2()
 p
 
 #Well, that ain't proper..
 # ggsave("eps_i.png", p, dpi=600, width=9, height=8, units=c("in"))
+
+# sim:
+# reshape2::melt(Sim_List[["v"]]) %>%
+#   dplyr::mutate(x = rep(Sim_List[["Loc"]][,"x"], ncol(Sim_List[["v"]])),
+#     y = rep(Sim_List[["Loc"]][,"y"], ncol(Sim_List[["v"]]))) %>%
+#   group_by(Var2) %>%
+#   mutate(eps = value - mean(value)) %>%
+#   ggplot(aes(x, y, col = value)) + geom_point() +
+#   facet_wrap(~Var2) +
+#   scale_color_gradient2()
+
+reshape2::melt(Sim_List[["v"]]) %>%
+  dplyr::mutate(x = rep(Sim_List[["Loc"]][,"x"], ncol(Sim_List[["v"]])),
+    y = rep(Sim_List[["Loc"]][,"y"], ncol(Sim_List[["v"]]))) %>%
+  ggplot(aes(x, y, col = value)) + geom_point() +
+  facet_wrap(~Var2) +
+  scale_color_gradient2()
 
