@@ -14,8 +14,8 @@
 *                       Probability of Random Coefficients:
 * epsilon_linf ~ N(0, ln_sd_linf)
 * epsilon_t0 ~ N(0, ln_sd_tzero)
-* eps_omega_st = rho*eps_omega_s,t-1 + u_st
-* where u_st ~ N(0, SIMGA) --> SIGMA is estimated as per INLA approach
+* eps_omega_st = rho*eps_st-1 + eps_st
+* where eps_st ~ N(0, SIMGA) --> SIGMA is estimated as per INLA approach
 *
 *                                 Likelihoods:
 * if(CTL == 1 == Normal)
@@ -58,7 +58,6 @@ Type objective_function<Type>::operator() ()
   DATA_IVECTOR( s_i );         //Random effect index for location(s)
   DATA_IVECTOR( t_i );         //Random effect index for year(t)
   DATA_INTEGER( n_t );         //number of years
-  DATA_IVECTOR( t_prev_i );    //Random effect index for year(t-1)
 
   DATA_INTEGER( CTL );         //Control for likelihood
   DATA_INTEGER(ar1);
@@ -128,14 +127,7 @@ Type objective_function<Type>::operator() ()
     Type t0    = 0;
     Type sigma = 0;
 
-    // if (t_i(i) == Type(0)){
-    //   eps_i(i) = eps_omega_st( s_i(i), t_i(i) )*sqrt(1-rho*rho);
-    // } else {
-    //   eps_i(i) = rho * eps_omega_st((s_i(i), t_prev_i(i))) + //previous raneff at location s*rho
-    //     eps_omega_st((s_i(i), t_i(i)));
-    // }
     eps_i(i) = eps_omega_st( s_i(i), t_i(i) );
-
 
     omega = exp(ln_global_omega) +                  //intercept
             eta_fixed_i(i) +                        //fixed effects
@@ -166,9 +158,9 @@ Type objective_function<Type>::operator() ()
   }
 
   // Reporting
-  REPORT(Range);
-  REPORT(SigmaO);
-  REPORT(rho);
+  ADREPORT(Range);
+  ADREPORT(SigmaO);
+  ADREPORT(rho);
   REPORT(length_pred);
   REPORT(eps_i);
 
