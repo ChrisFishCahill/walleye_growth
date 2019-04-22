@@ -13,9 +13,8 @@ rf_sim <- function(model, x, y) {
   )
 }
 
-Sim_Fn <-
- function( n_years=10, n_stations=100, SpatialScale=SpatialScale, SD_O=0.01, rho=0, beta1=-0.25, beta0=100, sigma=0.05 ){
-
+Sim_Fn <- function( n_years=nyears, n_stations=nstations, SpatialScale=SpatialScale, SD_O=SD_O,
+ 	                  rho=rho, beta1=beta1, beta0=beta0, sigma=sigma, Likelihood="LogNormal"){
   # Spatial model
   Loc = cbind( "x"=runif(n_stations, min=0,max=10), "y"=runif(n_stations, min=0,max=10) )
   rf_eps <- RandomFields::RMgauss(var=SD_O^2, scale=SpatialScale)
@@ -59,15 +58,14 @@ Sim_Fn <-
       if(any(lpreds < 0)){stop("negative length fish detected!")}
       sigmas = cv*lpreds
 
-      #sigma <- sqrt(log(cv^2+1))
-      #mu_i <- log(lpreds) - sigma^2/2
+      if(Likelihood=="Normal"){Simulated_Length = rnorm(Nfish, mean=lpreds, sd=sigmas)}
+      if(Likelihood=="Lognormal"){Simulated_Length = rlnorm0(Nfish, lpreds, cv)}
+      if(Likelihood=="Gamma"){print("Gamma Not Yet Implemented")}
 
       Tmp = data.frame("Lake"=rep(s, Nfish) , "Year"=rep(t, Nfish), "x1"=rep(x[s,t], Nfish), "Age" = Ages,
-                       "Simulated_Length"= rnorm(Nfish, mean=lpreds, sd=sigmas))
-                                           #exp(rlnorm0(mu_i, cv, n=length(lpreds))))
-                                          #rnorm(Nfish, mean=lpreds, sd=sigmas))
+                       "Simulated_Length"= Simulated_Length)
       DF = rbind(DF, Tmp)
-    }}
+  }}
   #plot(DF$Age,DF$Simulated_Length)
 
   DF = cbind( DF, 'Longitude'=Loc[DF[,'Lake'],1], 'Latitude'=Loc[DF[,'Lake'],2] )
@@ -85,7 +83,7 @@ Sim_Fn <-
   return(Sim_List)
 }
 
-rlnorm0 <- function(mean, coeffOfVar, n = 1)
+rlnorm0 <- function(n = 1, mean, coeffOfVar)
 {
    sigma <- sqrt(log(coeffOfVar^2 + 1))
    mu <- log(mean) - sigma^2 / 2
@@ -118,6 +116,8 @@ Nfish        <- 50
 nstations    <- 50
 nyears       <- 5
 
+Likelihood="Lognormal" #Normal, Lognormal, or Gamma (not yet implemented)
+
 setwd("sim/")
 Version = "vb_sim_estimation"
 
@@ -138,7 +138,7 @@ set.seed( seed )
 for(i in 1:Nsim){
 
  Sim_List = Sim_Fn( n_years=nyears, n_stations=nstations, SpatialScale=SpatialScale, SD_O=SD_O,
- 	                  rho=rho, beta1=beta1, beta0=beta0, sigma=sigma, title=i )
+ 	                  rho=rho, beta1=beta1, beta0=beta0, sigma=sigma, Likelihood=Likelihood )
 
  DF = Sim_List[["DF"]]
  loc_xy_orig = loc_xy = Sim_List[["Loc"]]
@@ -162,12 +162,15 @@ for(i in 1:Nsim){
  #Extract the sparse matricies
  spdeMatrices = spde$param.inla[c("M0","M1","M2")]
 
+ if(Likelihood=="Normal"){CTL <- 1}
+ if(Likelihood=="Lognormal"){CTL <- 2}
+
  # Build tagged list inputs
  Data = list("Nobs"=nrow(DF), "length_i"=DF$Simulated_Length, "age_i" = DF$Age,
              "lake_i" = DF$Lake - 1,
              "X_ij_omega"= model.matrix(~ -1 + DF$x1),
              "Nlakes" =  length(unique(DF$Lake)),
-             "spdeMatrices" = spdeMatrices, "CTL" = 1,
+             "spdeMatrices" = spdeMatrices, "CTL" = CTL,
              "s_i" = DF$Lake-1,
              "t_i" = DF$Year-1,
              "x_s" = mesh$idx$loc-1,
