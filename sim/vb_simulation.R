@@ -5,6 +5,7 @@ library(raster)
 library(RANN)
 library(ggplot2)
 library(dplyr)
+library(truncnorm)
 
 rf_sim <- function(model, x, y) {
   set.seed(sample.int(1e5L, 1L))
@@ -13,13 +14,21 @@ rf_sim <- function(model, x, y) {
   )
 }
 
+rlnorm0 <- function(n = 1, mean, coeffOfVar)
+{
+   sigma <- sqrt(log(coeffOfVar^2 + 1))
+   mu <- log(mean) - sigma^2 / 2
+   rlnorm(n, mu, sigma)
+}
+
 Sim_Fn <- function( n_years=nyears, n_stations=nstations, SpatialScale=SpatialScale, SD_O=SD_O,
- 	                  rho=rho, beta1=beta1, beta0=beta0, sigma=sigma, Likelihood="LogNormal"){
+ 	                  rho=rho, betas=betas, beta0=beta0, cv=cv, Likelihood="LogNormal", Design="Balanced"){
 
   # Spatial-temporal model component:
   Loc = cbind( "x"=runif(n_stations, min=0,max=10), "y"=runif(n_stations, min=0,max=10) )
   rf_eps <- RandomFields::RMgauss(var=SD_O^2, scale=SpatialScale)
   #rf_eps <- RandomFields::RMmatern(nu=1, var=SD_O^2, scale = SpatialScale ) #SpatialScale = 1 / kappa
+
   eps_st <- list()
   for(t in 1:n_years){
     if(t==1){
@@ -29,17 +38,16 @@ Sim_Fn <- function( n_years=nyears, n_stations=nstations, SpatialScale=SpatialSc
     }
   }
 
-  #Simulate a covariate x:
-  x <- matrix(runif(n=n_years*n_stations, min=-1, max=1), nrow=n_stations, ncol=n_years)
+  #Simulate covariates:
+  X_ij <- array(runif(n=n_years*n_stations*length(betas), min=-1, max=1), dim=c(nrow=n_stations, ncol=n_years, length(betas)))
 
-  # Calculate Eta_it --> this is spatial temporal field for omega
   Eta_it   = array(NA, dim=c(n_stations,n_years))
   for(t in 1:n_years){
-    Eta_it[,t] =  beta0  + beta1*x[ ,t] + eps_st[[t]] #fixed effects + Temporally evolving spatial field
+    Eta_it[,t] =  beta0  + betas[1]*X_ij[ ,t, 1] + betas[2]*X_ij[ ,t, 2] + betas[3]*X_ij[ ,t, 3] + eps_st[[t]] #fixed effects + Temporally evolving spatial field
   }
 
-  #Correct for exceedingly low omegas
-  Eta_it[which(Eta_it < 8.0)] <- NA
+  #Exclude exceedingly low simulated omegas (< 40 mm)-could instead use log-linear regression
+  Eta_it[which(Eta_it < 4.0)] <- NA
 
   #Simulate the assymptotic lengths:
   Epsilon_Linf <- rnorm(n_stations, mean=0, sd=SD_linf)
@@ -58,255 +66,290 @@ Sim_Fn <- function( n_years=nyears, n_stations=nstations, SpatialScale=SpatialSc
       T0    <- t0s[s]  #Each lake gets a random deviate for t0
       Omega <- Eta_it[s,t] #Predictors + Space-time for Omega
 
-      lpreds <-   Linf*(1-exp(-(Omega/Linf) * (Ages - T0 ))) #Deterministic VB preds
-
-      sigmas = cv*lpreds
+      lpreds <-   Linf*(1-exp(-(Omega/Linf) * (Ages - T0 ))) #VB predictions
 
       if(!any(is.na(lpreds))){
-       if(Likelihood=="Normal"){Simulated_Length = rnorm(Nfish, mean=lpreds, sd=sigmas)}
+       if(Likelihood=="Normal"){Simulated_Length = rtruncnorm(Nfish, mean=lpreds, sd=cv*lpreds, a=1, b=Inf)}
        if(Likelihood=="Lognormal"){Simulated_Length = rlnorm0(Nfish, lpreds, cv)}
        if(Likelihood=="Gamma"){Simulated_Length = rgamma(Nfish, shape=1/cv^2, scale=lpreds*cv^2)}
       } else {
        Simulated_Length <- lpreds
       }
-      if(any(is.na(lpreds))){Simulated_Length = lpreds}
 
-      #if(min(Simulated_Length) < 0){Simulated_Length=0}
-
-      Tmp = data.frame("Lake"=rep(s, Nfish) , "Year"=rep(t, Nfish), "x1"=rep(x[s,t], Nfish), "Age" = Ages,
+      Tmp = data.frame("Lake"=rep(s, Nfish) , "Year"=rep(t, Nfish), "x1"=rep(X_ij[s,t,1], Nfish),
+                       "x2"=rep(X_ij[s,t,2], Nfish), "x3"=rep(X_ij[s,t,3], Nfish), "Age" = Ages,
                        "Simulated_Length"= Simulated_Length)
       DF = rbind(DF, Tmp)
   }}
-  #plot(DF$Age,DF$Simulated_Length)
 
   DF = cbind( DF, 'Longitude'=Loc[DF[,'Lake'],1], 'Latitude'=Loc[DF[,'Lake'],2] )
   DF = data.frame(DF, row.names=NULL)
+
+  if(Design=="Unbalanced"){
+   lakes_to_keep <- sample(unique(DF$Lake), lakes_good_data*length(unique(DF$Lake)), replace=FALSE)
+
+   Which2Drop = setdiff(1:nrow(DF),lakes_to_keep)
+
+   DF[Which2Drop,'Simulated_Length'] = NA
+   Which2Keep = sample(1:nrow(DF), size=2000*Sim_List$n_years, replace=FALSE)
+   Which2Drop = setdiff(1:nrow(DF),Which2Keep)
+   message("Not yet implemented"); break
+  }
 
   # Return stuff
   Sim_List = list("DF"=DF, "Loc"=Loc, "Eta_it"=Eta_it,
                   "eps_st"=eps_st, "n_years"=n_years,
                   "n_stations"=n_stations)
   Sim_List[["Parameters"]] = c('SpatialScale'=SpatialScale, 'SigmaO'=SD_O,
-                               'rho'=rho, "beta0"=beta0, "beta1"=beta1,
-                               "sigma"=sigmas, 'Linf' = Global_Linf,
-                               "t0" = Global_t0, 'SD_t0' = SD_t0,
-                               'SD_linf'=SD_linf)
-  return(Sim_List)
+                               'rho'=rho, "beta0"=beta0, "beta_ij"=betas,
+                               'Linf' = Global_Linf, "t0" = Global_t0,
+                               'SD_t0' = SD_t0,'SD_linf'=SD_linf)
+  Sim_List
 }
 
-rlnorm0 <- function(n = 1, mean, coeffOfVar)
-{
-   sigma <- sqrt(log(coeffOfVar^2 + 1))
-   mu <- log(mean) - sigma^2 / 2
-   rlnorm(n, mu, sigma)
-}
-
-#---------------------------------------------------------------------------------------------------------------------------------------
-#Estimate the model:
-#---------------------------------------------------------------------------------------------------------------------------------------
+#--------------------
+#Run the simulation:
+#---------------------
 
 #Simulation parameters:
-#Note--the x and y ranges are 0-10
-
-Age_Range    <-  0:25
+Age_Range    <- 0:25
 Global_Linf  <- 55.70
 SD_linf      <- 7.41
 Global_t0    <- -1
 SD_t0        <- 0.3
-beta1        <- runif(1, -0.25, 0.25)
+betas        <- c(-1,0,1) #runif(1, -0.25, 0.25)
 beta0        <- 14.79 #runif(1, 14, 16)
-kappa        <- 0.2
+kappa        <- 0.5   #c(0.2, 0.5, 0.75)
 SpatialScale <- 1/kappa
 Range        <- sqrt(8) / kappa
 SD_O         <- 4.66
-rho          <- 0.91
+rho          <- 0.5
 cv           <-  0.069
-
 Nfish        <- 50
-nstations    <- 50
-nyears       <- 15
 
-Likelihood="Gamma" #Normal, Lognormal, or Gamma
+Likelihood=c("Normal", "Lognormal", "Gamma")
+Likelihood = Likelihood[1]
+
+Design = c("Balanced", "Unbalanced")
+Design = Design[1]
+lakes_good_data <- 0.1 #number of lakes with good data
+percent_of_data  <- 0.35 #percent of total dataset represented by lakes_good_data
 
 setwd("sim/")
-Version = "vb_sim_estimation"
+VersionSpatial = "vb_spdeXar1"
+VersionNonSpatial = "vb_nonspatial"
 
 # Compile
-compile( paste0(Version,".cpp") )
-dyn.load( dynlib(Version) )
-
-Nsim = 1000
-Estimates <- matrix(NA, nrow=Nsim, ncol=10)
-
-set_par_value <- function(opt, par) {
-  as.numeric(opt$par[par == names(opt$par)])
-}
+compile( paste0(VersionSpatial,".cpp") )
+compile( paste0(VersionNonSpatial,".cpp") )
 
 seed <-  sample.int(1e6, 1)
 set.seed( seed )
 #Run simulation:
-for(i in 1:Nsim){
 
- Sim_List = Sim_Fn( n_years=nyears, n_stations=nstations, SpatialScale=SpatialScale, SD_O=SD_O,
- 	                  rho=rho, beta1=beta1, beta0=beta0, sigma=sigma, Likelihood=Likelihood )
+N_years <- c(4,7,10,15,20)
+N_lakes <- c(25,50,80,100)
+Nsim <- 30
+ptm <- proc.time()
+for(nyears in unique(N_years)){
+  for(Nlakes in unique(N_lakes)){
+    replicate=1
+    while(replicate  < Nsim ){
+    Sim_List = Sim_Fn( n_years=nyears, n_stations=Nlakes, SpatialScale=SpatialScale, SD_O=SD_O,
+ 	                     rho=rho, betas=betas, beta0=beta0, cv=cv, Likelihood=Likelihood, Design=Design )
 
- DF = Sim_List[["DF"]]
- loc_xy_orig = loc_xy = Sim_List[["Loc"]]
+    DF = Sim_List[["DF"]]
+    loc_xy_orig = loc_xy = unique(DF[,c("Longitude", "Latitude")])
 
- mesh = inla.mesh.create( loc_xy, refine=TRUE, extend=-0.5, cutoff=0.01 ) #
- spde = inla.spde2.matern( mesh, alpha=2 ) #nu=1 in matern simulation means alpha should be 2 here.
- #plot(mesh)
- #points(loc_xy_orig, pch=16, col="Steelblue")
+    mesh = inla.mesh.create( loc_xy, refine=TRUE, extend=-0.5, cutoff=0.01 )
+    spde = inla.spde2.matern( mesh, alpha=2 )
 
- ggplot(DF, aes(Age, Simulated_Length)) + geom_point()
-  #       facet_wrap(~Lake)
+    #------Plots--------
+    #plot(mesh)
+    #points(loc_xy_orig, pch=16, col="Steelblue")
+    #
+    #ggplot(DF, aes(Age, Simulated_Length)) + geom_point() + facet_wrap(~Lake)
+    #
+    # d <- reshape2::melt(Sim_List[["eps_st"]]) %>%
+    #        dplyr::mutate(x = rep(Sim_List[["Loc"]][,"x"], nyears),
+    #        y = rep(Sim_List[["Loc"]][,"y"], nyears))
+    #
+    # ggplot(d, aes(x, y, col = value)) + geom_point() +
+    #  facet_wrap(~L1) +
+    #  scale_color_gradient2()
+    #-------------------
 
- d <- reshape2::melt(Sim_List[["eps_st"]]) %>%
-        dplyr::mutate(x = rep(Sim_List[["Loc"]][,"x"], nyears),
-        y = rep(Sim_List[["Loc"]][,"y"], nyears))
+    #Extract the sparse matricies
+    spdeMatrices = spde$param.inla[c("M0","M1","M2")]
 
- ggplot(d, aes(x, y, col = value)) + geom_point() +
-  facet_wrap(~L1) +
-  scale_color_gradient2()
+    if(Likelihood=="Normal"){CTL <- 1}
+    if(Likelihood=="Lognormal"){CTL <- 2}
+    if(Likelihood=="Gamma"){CTL <- 3}
 
- #Extract the sparse matricies
- spdeMatrices = spde$param.inla[c("M0","M1","M2")]
+    # Build tagged list inputs
+    data_spatial = list("Nobs"=nrow(DF), "length_i"=DF$Simulated_Length, "age_i" = DF$Age,
+                        "lake_i" = DF$Lake - 1,
+                        "X_ij_omega"= model.matrix(~ -1 + DF$x1 + DF$x2 + DF$x3),
+                        "Nlakes" =  length(unique(DF$Lake)),
+                        "spdeMatrices" = spdeMatrices, "CTL" = CTL,
+                        "s_i" = DF$Lake-1,
+                        "t_i" = DF$Year-1,
+                        "n_t" = max(DF$Year) )
 
- if(Likelihood=="Normal"){CTL <- 1}
- if(Likelihood=="Lognormal"){CTL <- 2}
- if(Likelihood=="Gamma"){CTL <- 3}
+     data_nonspatial = list("Nobs"=nrow(DF), "length_i"=DF$Simulated_Length, "age_i" = DF$Age,
+                            "lake_i" = DF$Lake - 1,
+                            "X_ij_omega"= model.matrix(~ -1 + DF$x1 + DF$x2 + DF$x3),
+                            "Nlakes" =  length(unique(DF$Lake)),"CTL" = CTL )
 
- # Build tagged list inputs
- Data = list("Nobs"=nrow(DF), "length_i"=DF$Simulated_Length, "age_i" = DF$Age,
-             "lake_i" = DF$Lake - 1,
-             "X_ij_omega"= model.matrix(~ -1 + DF$x1),
-             "Nlakes" =  length(unique(DF$Lake)),
-             "spdeMatrices" = spdeMatrices, "CTL" = CTL,
-             "s_i" = DF$Lake-1,
-             "t_i" = DF$Year-1,
-             "x_s" = mesh$idx$loc-1,
-             "n_t" = max(DF$Year) )
+     parameters_spatial = list("ln_global_omega" = log(beta0),
+   	       					           "ln_global_linf" = log(Global_Linf),
+                               "ln_sd_linf" = log(SD_linf),
+  					    			         "global_tzero" = Global_t0,
+                               "ln_sd_tzero" = log(SD_t0),
+  								             "b_j_omega" = betas,
+  								             "eps_omega_st" = matrix(0,  nrow=mesh$n,ncol=data_spatial$n_t ),
+                               "eps_linf" = rep(0, data_spatial$Nlakes ),
+                               "eps_t0" = rep(0, data_spatial$Nlakes ),
+                               "ln_cv" = log(cv),
+  								             "ln_kappa" = log(kappa),
+	                             "ln_tau_O" =  -2,
+                               "rho" = rho )
 
- Parameters = list("ln_global_omega" = log(beta0),
-   	   					   "ln_global_linf" = log(Global_Linf),
-                   "ln_sd_linf" = log(SD_linf),
-  								 "global_tzero" = Global_t0,
-                   "ln_sd_tzero" = log(SD_t0),
-  								 "b_j_omega" = beta1,
-  								 "eps_omega_st" = matrix(0,  nrow=mesh$n,ncol=Data$n_t ),
-                   "eps_linf" = rep(0, Data$Nlakes ),
-                   "eps_t0" = rep(0, Data$Nlakes ),
-                   "ln_cv" = log(cv),
-  								 "ln_kappa" = log(kappa),
-	                 "ln_tau_O" = 1,
-                   "rho_unscaled" = 2 * plogis(rho) - 1)
+      parameters_nonspatial = list("ln_global_omega" = log(beta0),
+                                   "ln_sd_omega" = log(SD_O),
+   	   		          	             "ln_global_linf" = log(Global_Linf),
+                                   "ln_sd_linf" = log(SD_linf),
+  								                 "global_tzero" = Global_t0,
+                                   "ln_sd_tzero" = log(SD_t0),
+  								                 "b_j_omega" = betas,
+  								                 "eps_omega" = rep(0, data_nonspatial$Nlakes ),
+                                   "eps_linf" = rep(0, data_nonspatial$Nlakes ),
+                                   "eps_t0" = rep(0, data_nonspatial$Nlakes ),
+                                   "ln_cv" = log(cv) )
 
- Random = c("eps_linf", "eps_t0", "eps_omega_st")
+      random_spatial = c("eps_linf", "eps_t0", "eps_omega_st")
+      random_nonspatial = c("eps_linf", "eps_t0", "eps_omega")
 
- Data$ar1 <- 1L
- Map <- list()
- if (Data$ar1 == 0L) Map[["rho_unscaled"]] = factor(NA)
- Obj <- MakeADFun(data=Data, parameters=Parameters, random=Random,
-                  hessian=FALSE, DLL=Version,map = Map)
+      dyn.load( dynlib(VersionSpatial) )
+      obj_spatial <- MakeADFun(data=data_spatial, parameters=parameters_spatial,
+                               random=random_spatial, hessian=FALSE, DLL=VersionSpatial)
 
- #Obj$fn( Obj$par )
- #Obj$gr( Obj$par )
+      opt_spatial = tryCatch(TMBhelper::Optimize(obj=obj_spatial,
+                             control=list(eval.max=1000, iter.max=1000),
+                             getsd=T, newtonsteps=1, bias.correct=T,
+                             lower=c(rep(-Inf,11),-0.999), upper=c(rep(Inf,11),0.999)),
+                             error = function(e) e)
 
- # Phased for a bit of a speed boost:
- # ---------------------------------
- # Phase 1: (fixed effects)
+      dyn.load( dynlib(VersionNonSpatial) )
+      obj_nonspatial <- MakeADFun(data=data_nonspatial, parameters=parameters_nonspatial,
+                                  random=random_nonspatial, hessian=FALSE, DLL=VersionNonSpatial)
 
- Map <- list()
- Map[["ln_sd_linf"]] = factor(NA)
- Map[["eps_linf"]] = rep(factor(NA), length(Parameters$eps_linf))
- Map[["ln_sd_tzero"]] = factor(NA)
- Map[["eps_t0"]] = rep(factor(NA), length(Parameters$eps_t0))
- Map[["ln_kappa"]] = factor(NA)
- Map[["ln_tau_O"]] = factor(NA)
- Map[["rho_unscaled"]] = factor(NA)
- Map[["eps_omega_st"]] = factor(matrix(NA,  nrow=mesh$n,ncol=Data$n_t ))
+      opt_nonspatial = tryCatch(TMBhelper::Optimize(obj=obj_nonspatial,
+                                control=list(eval.max=1000, iter.max=1000),
+                                getsd=T, newtonsteps=1, bias.correct=F),
+                                error = function(e) e)
 
- Obj <- MakeADFun(data=Data, parameters=Parameters, random=NULL,
-                  hessian=FALSE, DLL=Version, map = Map)
+      #if the estimation behaves, save results & advance loop
+      if(!inherits(opt_spatial, "error") && !inherits(opt_nonspatial, "error")){
 
- Opt = TMBhelper::Optimize(obj=Obj,
-                           control=list(eval.max=1000, iter.max=1000),
-                           getsd=T, newtonsteps=1, bias.correct=F)
+        SD = sdreport( obj_spatial )
+        SD_nonspatial = sdreport( obj_nonspatial )
 
- Parameters[["ln_global_omega"]] = set_par_value(Opt, "ln_global_omega")
- Parameters[["ln_global_linf"]] = set_par_value(Opt, "ln_global_linf")
- Parameters[["global_tzero"]] = set_par_value(Opt, "global_tzero")
- Parameters[["b_j_omega"]] = set_par_value(Opt, "b_j_omega")
- Parameters[["ln_cv"]] = set_par_value(Opt, "ln_cv")
+        gradients <- c(c(obj_spatial$gr( opt_spatial$par ), obj_nonspatial$gr( opt_nonspatial$par )))
+        if( any(abs(gradients)>0.0001) | SD$pdHess==FALSE | SD_nonspatial$pdHess==FALSE ) stop("Not converged")
 
- # ----------------------------------
- # Phase 2: (+ random effects)
+        sim_rep <- list()
+        sim_rep[["sim_data"]] = Sim_List
 
- Map <- list()
- if (Data$ar1 == 0L) Map[["rho_unscaled"]] = factor(NA)
+        spatial_summary = summary(SD)
+        spatial_report = obj_spatial$report()
+        opt_spatial[["summary"]] = spatial_summary
+        opt_spatial[["report"]] = spatial_report
+        sim_rep[["opt_spatial"]] = opt_spatial
 
- Obj <- MakeADFun(data=Data, parameters=Parameters, random=Random,
-                  hessian=FALSE, DLL=Version, map = Map)
+        nonspatial_summary = summary(SD_nonspatial)
+        nonspatial_report = obj_nonspatial$report()
+        opt_nonspatial[["summary"]] = nonspatial_summary
+        opt_nonspatial[["report"]] = nonspatial_report
+        sim_rep[["opt_nonspatial"]] = opt_nonspatial
 
- Opt = TMBhelper::Optimize(obj=Obj,
-                           control=list(eval.max=1000, iter.max=1000),
-                           getsd=T, newtonsteps=1, bias.correct=F)
+        file_name <- paste(paste0(paste0(nyears, "Years"), Nlakes, "Lakes"), paste(replicate,"Replicate.RData",sep=""), sep="_")
+        save(sim_rep, file=file_name)
+        print(paste(paste("Simulation", replicate, sep=" "), "Complete", sep=" "))
+        replicate <- replicate + 1
+      } #try
+    } #while
+    print(paste(paste("Nlakes", Nlakes, sep=" "), "Complete", sep=" "))
+  } #nlakes
+} #nyears
+proc.time() - ptm
 
- Opt
 
- SD = sdreport( Obj )
- final_gradient = Obj$gr( Opt$par )
- if( any(abs(final_gradient)>0.0001) | SD$pdHess==FALSE ) stop("Not converged")
 
- #Git yer report:
- Report = Obj$report()
 
- Estimates[i,1] = SD$value[["rho"]]
- Estimates[i,2] = SD$value[["SigmaO"]]
- Estimates[i,3] = exp(as.numeric(Opt$par["ln_kappa"]))
- Estimates[i,4] = exp(as.numeric(Opt$par["ln_cv"]))
- Estimates[i,5] = exp(as.numeric(Opt$par["ln_global_omega"]))
- Estimates[i,6] = exp(as.numeric(Opt$par["ln_global_linf"]))
- Estimates[i,7] = exp(as.numeric(Opt$par["ln_sd_linf"]))
- Estimates[i,8] = as.numeric(Opt$par["global_tzero"])
- Estimates[i,9] = exp(as.numeric(Opt$par["ln_sd_tzero"]))
- Estimates[i,10] = as.numeric(Opt$par["b_j_omega"])
 
- par(mfrow=c(4,3))
- hist(Estimates[,1], main="", xlab="Rho")
- abline(v=rho, lty=3, lwd=3, col="Steelblue")
+sim_results <- array(NA, dim=c(2, Nsim, 10, 3), dimnames=list(c("Spatial","Nonspatial"), NULL,
+                     names(opt_spatial$par),
+                     c("10%","50%","90%")))
 
- hist(Estimates[,2], main="", xlab="SD_O")
- abline(v=SD_O, lty=3, lwd=3, col="Steelblue")
+for(replicate in 1:Nsim){
+  load( paste(replicate,"Simulation.RData",sep="") )
 
- hist(Estimates[,3], main="", xlab="Kappa")
- abline(v=kappa, lty=3, lwd=3, col="Steelblue")
+  sim_results["Spatial", replicate, names(opt_spatial$par),
+              c("10%","50%","90%")] = sim_rep$opt_spatial$summary[c(names(opt_spatial$par)),'Estimate']%o%rep(1,3) +
+              sim_rep$opt_spatial$summary[c(names(opt_spatial$par)), 'Std. Error']%o%qnorm(c(0.1,0.5,0.9))
 
- hist(Estimates[,4], main="", xlab="CV")
- abline(v=cv, lty=3, lwd=3, col="Steelblue")
-
- hist(Estimates[,5], main="", xlab="Beta0" )
- abline(v=beta0, lty=3, lwd=3, col="Steelblue")
-
- hist(Estimates[,6], main="", xlab="Linf")
- abline(v=Global_Linf, lty=3, lwd=3, col="Steelblue")
-
- hist(Estimates[,7], main="", xlab="SD_Linf")
- abline(v=SD_linf, lty=3, lwd=3, col="Steelblue")
-
- hist(Estimates[,8], main="", xlab="Tzero")
- abline(v=Global_t0, lty=3, lwd=3, col="Steelblue")
-
- hist(Estimates[,9], main="", xlab="SD_t0")
- abline(v=SD_t0, lty=3, lwd=3, col="Steelblue")
-
- hist(Estimates[,10], main="", xlab="beta1")
- abline(v=beta1, lty=3, lwd=3, col="Steelblue")
-
- print(i)
+  sim_results["Nonspatial", replicate, c("ln_global_omega", "ln_global_linf", "ln_sd_linf", "global_tzero", "ln_sd_tzero", "b_j_omega", "ln_cv"),
+               c("10%","50%","90%")] = sim_rep$opt_nonspatial$summary[c("ln_global_omega", "ln_global_linf", "ln_sd_linf", "global_tzero", "ln_sd_tzero", "b_j_omega", "ln_cv"),
+              'Estimate']%o%rep(1,3) + sim_rep$opt_nonspatial$summary[c("ln_global_omega", "ln_global_linf", "ln_sd_linf", "global_tzero", "ln_sd_tzero", "b_j_omega", "ln_cv"), 'Std. Error']%o%qnorm(c(0.1,0.5,0.9))
 }
 
-DF$eps <- Report$eps_i
+par(mfrow=c(2,1))
+boxplot(sim_results["Spatial", , "b_j_omega", 2])
+boxplot(sim_results["Nonspatial", , "b_j_omega", 2], add=T)
+
+abline(h=beta1, lty=3)
+
+d <-   reshape2::melt(sim_results[c("Spatial", "Nonspatial"), , "b_j_omega", 2])
+p <- ggplot(d, aes(Var1, value))
+p <- p + geom_boxplot()
+p <- p +  geom_hline(aes(yintercept=beta1), colour="#990000")
+p
+
+
+
+save( tmp, file=paste(RepFile,"Save_Spatial.RData",sep=""))
+load("2Simulation.RData")
+tmp
+names(tmp[["spatial_summary"]])
+
+
+opt_spatial$summary["rho", "Estimate"]
+sim_rep$opt_spatial$summary["rho", "Estimate"]
+sim_rep$opt_spatial$summary["rho", "Std. Error"]
+
+sim_rep$opt_nonspatial$summary["b_j_omega", "Estimate"]
+sim_rep$opt_spatial$summary["b_j_omega", "Estimate"]
+
+#Unbalanced vs. balanced design
+
+#Non-spatial model for simulation
+#4,8,12,16,20 years
+#25,50,75,100 lakes
+
+If possible, estimate non-spatial model in last loop,
+then do data processing after below.
+
+
+
+
+vector <- as.data.frame(unlist(Estimates))
+vector$eps_t0
+
+list.condition <- sapply(Estimates, function(x) class(x)=="eps_omega_st")
+output.list  <- Estimates[list.condition]
+
+DF$eps <- spatial_report$eps_i
 d <-   reshape2::melt(DF$eps) %>%
        mutate(WBID=DF$Lake,
               x = DF$Longitude,
@@ -326,15 +369,15 @@ p
 
 # ggsave("eps_i.png", p, dpi=600, width=9, height=8, units=c("in"))
 
-png( file="100sim_NormalLike_50fish_50stations.png", width=8, height=8, res=500, units="in")
+png( file="100sim_Gamma_50fish_80stations_4Years.png", width=8, height=8, res=500, units="in")
 par(mfrow=c(4,3))
-hist(Estimates[,1], main="", xlab="Rho", breaks=15)
+hist(Estimates[[1:Nsim]], main="", xlab="Rho")
 abline(v=rho, lty=3, lwd=3, col="Steelblue")
 
-hist(Estimates[,2], main="", xlab="SD_O", breaks=35)
+hist(Estimates[,2], main="", xlab="SD_O")
 abline(v=SD_O, lty=3, lwd=3, col="Steelblue")
 
-hist(Estimates[,3], main="", xlab="Kappa", xlim=c(0.15, 0.45), breaks=50)
+hist(Estimates[,3], main="", xlab="Kappa")
 abline(v=kappa, lty=3, lwd=3, col="Steelblue")
 
 hist(Estimates[,4], main="", xlab="CV")
@@ -359,3 +402,54 @@ hist(Estimates[,10], main="", xlab="beta1")
 abline(v=beta1, lty=3, lwd=3, col="Steelblue")
 
 dev.off()
+
+d2 <- reshape2::melt(Sim_List[["eps_st"]]) %>%
+         dplyr::mutate(x = rep(Sim_List[["Loc"]][,"x"], nyears),
+         y = rep(Sim_List[["Loc"]][,"y"], nyears))
+
+  ggplot(d2, aes(x, y, col = value)) + geom_point() +
+   facet_wrap(~L1) +
+   scale_color_gradient2()
+
+
+
+
+
+
+
+  # Build tagged list inputs
+ Data = list("Nobs"=nrow(DF), "length_i"=DF$Simulated_Length, "age_i" = DF$Age,
+             "lake_i" = DF$Lake - 1,
+             "X_ij_omega"= model.matrix(~ -1 + DF$x1),
+             "Nlakes" =  length(unique(DF$Lake)),"CTL" = CTL
+             )
+
+ Parameters = list("ln_global_omega" = log(beta0),
+                   "ln_sd_omega" = log(SD_O),
+   	   					   "ln_global_linf" = log(Global_Linf),
+                   "ln_sd_linf" = log(SD_linf),
+  								 "global_tzero" = Global_t0,
+                   "ln_sd_tzero" = log(SD_t0),
+  								 "b_j_omega" = beta1,
+  								 "eps_omega" = rep(0, Data$Nlakes ),
+                   "eps_linf" = rep(0, Data$Nlakes ),
+                   "eps_t0" = rep(0, Data$Nlakes ),
+                   "ln_cv" = log(cv)
+                   )
+
+ Random = c("eps_linf", "eps_t0", "eps_omega")
+
+ Version = "vb_nonspatial"
+
+
+# Compile
+compile( paste0(Version,".cpp") )
+dyn.load( dynlib(Version) )
+
+ obj_nonspatial <- MakeADFun(data=Data, parameters=Parameters, random=Random,
+                   hessian=FALSE, DLL=Version)
+
+ opt_nonspatial = tryCatch(TMBhelper::Optimize(obj=obj_nonspatial,
+                           control=list(eval.max=1000, iter.max=1000),
+                           getsd=T, newtonsteps=1, bias.correct=T),
+                           error = function(e) e)
