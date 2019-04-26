@@ -57,7 +57,6 @@ Type objective_function<Type>::operator() ()
 
   DATA_IVECTOR( s_i );         //Random effect index for location(s)
   DATA_IVECTOR( t_i );         //Random effect index for year(t)
-  DATA_INTEGER( n_t );         //number of years
 
   DATA_INTEGER( CTL );         //Control for likelihood
 
