@@ -15,7 +15,8 @@ rf_sim <- function(model, x, y) {
 
 Sim_Fn <- function( n_years=nyears, n_stations=nstations, SpatialScale=SpatialScale, SD_O=SD_O,
  	                  rho=rho, beta1=beta1, beta0=beta0, sigma=sigma, Likelihood="LogNormal"){
-  # Spatial model
+
+  # Spatial-temporal model component:
   Loc = cbind( "x"=runif(n_stations, min=0,max=10), "y"=runif(n_stations, min=0,max=10) )
   rf_eps <- RandomFields::RMgauss(var=SD_O^2, scale=SpatialScale)
   #rf_eps <- RandomFields::RMmatern(nu=1, var=SD_O^2, scale = SpatialScale ) #SpatialScale = 1 / kappa
@@ -34,9 +35,12 @@ Sim_Fn <- function( n_years=nyears, n_stations=nstations, SpatialScale=SpatialSc
   # Calculate Eta_it --> this is spatial temporal field for omega
   Eta_it   = array(NA, dim=c(n_stations,n_years))
   for(t in 1:n_years){
-    Eta_it[,t] =  beta0  + beta1*x[ ,t] + eps_st[[t]] #v[,t] #mu(i,t) = fixed effects + Temporally evolving spatial field
+    Eta_it[,t] =  beta0  + beta1*x[ ,t] + eps_st[[t]] #fixed effects + Temporally evolving spatial field
   }
-  #
+
+  #Correct for exceedingly low omegas
+  Eta_it[which(Eta_it < 8.0)] <- NA
+
   #Simulate the assymptotic lengths:
   Epsilon_Linf <- rnorm(n_stations, mean=0, sd=SD_linf)
   Linfs <- Global_Linf + Epsilon_Linf
@@ -55,12 +59,19 @@ Sim_Fn <- function( n_years=nyears, n_stations=nstations, SpatialScale=SpatialSc
       Omega <- Eta_it[s,t] #Predictors + Space-time for Omega
 
       lpreds <-   Linf*(1-exp(-(Omega/Linf) * (Ages - T0 ))) #Deterministic VB preds
-      if(any(lpreds < 0)){stop("negative length fish detected!")}
+
       sigmas = cv*lpreds
 
-      if(Likelihood=="Normal"){Simulated_Length = rnorm(Nfish, mean=lpreds, sd=sigmas)}
-      if(Likelihood=="Lognormal"){Simulated_Length = rlnorm0(Nfish, lpreds, cv)}
-      if(Likelihood=="Gamma"){print("Gamma Not Yet Implemented")}
+      if(!any(is.na(lpreds))){
+       if(Likelihood=="Normal"){Simulated_Length = rnorm(Nfish, mean=lpreds, sd=sigmas)}
+       if(Likelihood=="Lognormal"){Simulated_Length = rlnorm0(Nfish, lpreds, cv)}
+       if(Likelihood=="Gamma"){Simulated_Length = rgamma(Nfish, shape=1/cv^2, scale=lpreds*cv^2)}
+      } else {
+       Simulated_Length <- lpreds
+      }
+      if(any(is.na(lpreds))){Simulated_Length = lpreds}
+
+      #if(min(Simulated_Length) < 0){Simulated_Length=0}
 
       Tmp = data.frame("Lake"=rep(s, Nfish) , "Year"=rep(t, Nfish), "x1"=rep(x[s,t], Nfish), "Age" = Ages,
                        "Simulated_Length"= Simulated_Length)
@@ -98,25 +109,24 @@ rlnorm0 <- function(n = 1, mean, coeffOfVar)
 #Note--the x and y ranges are 0-10
 
 Age_Range    <-  0:25
-Global_Linf  <- 60
-SD_linf      <- 1.0
+Global_Linf  <- 55.70
+SD_linf      <- 7.41
 Global_t0    <- -1
-SD_t0        <- 0.05
+SD_t0        <- 0.3
 beta1        <- runif(1, -0.25, 0.25)
-beta0        <- 150/10 #runif(1, 14, 16)
+beta0        <- 14.79 #runif(1, 14, 16)
 kappa        <- 0.2
 SpatialScale <- 1/kappa
 Range        <- sqrt(8) / kappa
-SD_O         <- 1.5
-rho          <- 0.5
-cv           <-  0.067
-
+SD_O         <- 4.66
+rho          <- 0.91
+cv           <-  0.069
 
 Nfish        <- 50
 nstations    <- 50
-nyears       <- 5
+nyears       <- 15
 
-Likelihood="Lognormal" #Normal, Lognormal, or Gamma (not yet implemented)
+Likelihood="Gamma" #Normal, Lognormal, or Gamma
 
 setwd("sim/")
 Version = "vb_sim_estimation"
@@ -164,6 +174,7 @@ for(i in 1:Nsim){
 
  if(Likelihood=="Normal"){CTL <- 1}
  if(Likelihood=="Lognormal"){CTL <- 2}
+ if(Likelihood=="Gamma"){CTL <- 3}
 
  # Build tagged list inputs
  Data = list("Nobs"=nrow(DF), "length_i"=DF$Simulated_Length, "age_i" = DF$Age,

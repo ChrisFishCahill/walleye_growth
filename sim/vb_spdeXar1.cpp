@@ -60,7 +60,6 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER( n_t );         //number of years
 
   DATA_INTEGER( CTL );         //Control for likelihood
-  DATA_INTEGER(ar1);
 
   //Parameters
   PARAMETER(ln_global_omega);
@@ -83,7 +82,7 @@ Type objective_function<Type>::operator() ()
   //spatial-temporal terms
   PARAMETER( ln_kappa );       //matern kappa
   PARAMETER( ln_tau_O );       //spatial noise
-  PARAMETER( rho_unscaled );   //autocorrelation term
+  PARAMETER( rho );            //autocorrelation term
 
   //calculate the fixed effects:
   vector<Type> eta_fixed_i = X_ij_omega * b_j_omega;
@@ -92,8 +91,6 @@ Type objective_function<Type>::operator() ()
   vector<Type> sigma (Nobs);
   vector<Type> eps_i (Nobs);
 
-  Type rho = Type(2)*invlogit(rho_unscaled)-Type(1);
-
   // Objective function
   Type jnll = 0;
 
@@ -101,31 +98,20 @@ Type objective_function<Type>::operator() ()
   Type Range = sqrt(8) / exp( ln_kappa );
   Type SigmaO = 1 / sqrt(4 * M_PI * exp(2*ln_tau_O) * exp(2*ln_kappa));
 
-  // Probability of random coefficients for linf in lake l:
+  // Probability of non-spatial random coefficients
   for(int l=0; l<Nlakes; l++){
     jnll -= dnorm(eps_linf(l), Type(0.0), exp(ln_sd_linf), true);
-  }
-
-  // Probability of random coefficients for t0 in lake l:
-  for(int l=0; l<Nlakes; l++){
     jnll -= dnorm(eps_t0(l), Type(0.0), exp(ln_sd_tzero), true);
   }
 
   // Probability of spatial-temporal random coefficients
   SparseMatrix<Type> Q = R_inla::Q_spde(spdeMatrices, exp(ln_kappa));
+  jnll += SCALE(SEPARABLE(AR1(rho), GMRF(Q)), 1.0 / exp(ln_tau_O))(eps_omega_st);
 
-  if (ar1 == 0) {
-    for(int t=0; t < n_t; t++)
-      jnll += SCALE(GMRF(Q), 1.0 / exp(ln_tau_O))(eps_omega_st.col(t));
-  } else {
-    jnll += SCALE(SEPARABLE(AR1(rho), GMRF(Q)), 1.0 / exp(ln_tau_O))(eps_omega_st);
-  }
-
-    for(int i=0; i<Nobs; i++){
+  for(int i=0; i<Nobs; i++){
     Type omega = 0;
     Type linf  = 0;
     Type t0    = 0;
-    Type sigma = 0;
 
     eps_i(i) = eps_omega_st( s_i(i), t_i(i) );
 
@@ -140,27 +126,25 @@ Type objective_function<Type>::operator() ()
             eps_t0(lake_i(i));                      //std ran eff
 
     length_pred(i) = linf*(1-exp(-(omega/linf) * (age_i (i) - t0 )));
-    sigma    = exp(ln_cv)*length_pred(i);
 
     //CYO likelihood
     if(CTL == 1){
-    //Normal
-      if( !isNA(length_i(i)) ) jnll -= dnorm( length_i(i), length_pred(i), sigma, true );
+     //Normal
+     if( !isNA(length_i(i)) ) jnll -= dnorm( length_i(i), length_pred(i), exp(ln_cv)*length_pred(i), true );
     }
     if(CTL == 2){
-    //Lognormal
-      if( !isNA(length_i(i)) ) jnll -= dlnorm(length_i(i), log(length_pred(i)) - pow(sigma, 2)/2, sigma, true );
+     //Lognormal
+     if( !isNA(length_i(i)) ) jnll -= dlnorm(length_i(i), log(length_pred(i)) - pow(exp(ln_cv), 2)/2, exp(ln_cv), true );
     }
     if(CTL == 3){
-    //Gamma
-      if( !isNA(length_i(i)) ) jnll -= dgamma( length_i(i), 1/pow(exp(ln_cv),2), length_pred(i)*pow(exp(ln_cv),2), true ); ;
+     //Gamma
+     if( !isNA(length_i(i)) ) jnll -= dgamma( length_i(i), 1/pow(exp(ln_cv),2), length_pred(i)*pow(exp(ln_cv),2), true ); ;
     }
   }
 
   // Reporting
-  ADREPORT(Range);
+  REPORT(Range);
   ADREPORT(SigmaO);
-  ADREPORT(rho);
   REPORT(length_pred);
   REPORT(eps_i);
 
