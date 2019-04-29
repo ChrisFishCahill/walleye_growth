@@ -1,6 +1,6 @@
 #include <TMB.hpp>
 /*
-*      Spatial-temporal von Bertalanffy with density dependent growth regression
+*      Hierarchical von Bertalanffy with density dependent growth regression
 *                     Galluci and Quinn (1979) Parameterization
 *
 *                                Model structure:
@@ -55,7 +55,6 @@ Type objective_function<Type>::operator() ()
 
   //Parameters
   PARAMETER(ln_global_omega);
-  PARAMETER(ln_sd_omega);
 
   PARAMETER(ln_global_linf);
   PARAMETER(ln_sd_linf);
@@ -71,6 +70,8 @@ Type objective_function<Type>::operator() ()
 
   //Likelihood noise term
   PARAMETER(ln_cv);
+
+  PARAMETER(ln_sd_omega);
 
   //calculate the fixed effects:
   vector<Type> eta_fixed_i = X_ij_omega * b_j_omega;

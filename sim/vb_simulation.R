@@ -1,3 +1,9 @@
+#-----------------------------
+#von Bertalanffy simulation with AR-1 spatial-temporal dependency
+#
+#Coded by Cahill April 2019
+
+#Libraries
 library(INLA)
 library(TMB)
 library(RandomFields)
@@ -136,7 +142,7 @@ cv           <- 0.069
 Nfish        <- 50
 
 Likelihood=c("Normal", "Lognormal", "Gamma")
-Likelihood = Likelihood[1]
+Likelihood = Likelihood[2]
 
 Design = c("Balanced", "Unbalanced")
 Design = Design[2]
@@ -152,15 +158,16 @@ compile( paste0(VersionSpatial,".cpp") )
 compile( paste0(VersionNonSpatial,".cpp") )
 
 seed <-  sample.int(1e6, 1)
-set.seed( seed )
+set.seed( seed ) #839232
 #Run simulation:
 
 N_years <- c(4,7,10,15,20)
-N_years <- N_years[1]
+N_years <- N_years[4:5]
 N_lakes <- c(25,50,80,100)
-N_lakes <- N_lakes[1:2]
-Nsim <- 3
+N_lakes <- N_lakes[3:4]
+Nsim <- 100
 Designs = c("Balanced", "Unbalanced")
+Designs <- Designs[2]
 
 ptm <- proc.time()
 for(design in Designs){
@@ -218,11 +225,11 @@ for(nyears in unique(N_years)){
                                "eps_linf" = rep(0, data_spatial$Nlakes ),"eps_t0" = rep(0, data_spatial$Nlakes ),
                                "ln_cv" = log(cv), "ln_kappa" = log(kappa), "ln_tau_O" =  -2, "rho" = rho )
 
-    parameters_nonspatial = list("ln_global_omega" = log(beta0), "ln_sd_omega" = log(SD_O),
+    parameters_nonspatial = list("ln_global_omega" = log(beta0),
                                  "ln_global_linf" = log(Global_Linf), "ln_sd_linf" = log(SD_linf), "global_tzero" = Global_t0,
                                  "ln_sd_tzero" = log(SD_t0),"b_j_omega" = betas, "eps_omega" = rep(0, data_nonspatial$Nlakes ),
                                  "eps_linf" = rep(0, data_nonspatial$Nlakes ), "eps_t0" = rep(0, data_nonspatial$Nlakes ),
-                                 "ln_cv" = log(cv) )
+                                 "ln_cv" = log(cv), "ln_sd_omega" = log(SD_O) )
 
     random_spatial = c("eps_linf", "eps_t0", "eps_omega_st")
     random_nonspatial = c("eps_linf", "eps_t0", "eps_omega")
@@ -245,14 +252,12 @@ for(nyears in unique(N_years)){
                                                   getsd=T, newtonsteps=1, bias.correct=F),
                               error = function(e) e)
 
-      #if the estimation behaves, save results & advance loop
-      if(!inherits(opt_spatial, "error") && !inherits(opt_nonspatial, "error")){
+      #if the estimation behaves + Hessians are positive definite,  save results & advance loop
+      if(!inherits(opt_spatial, "error") && !inherits(opt_nonspatial, "error") &&
+         is.null(opt_spatial$h) && is.null(opt_nonspatial$h)){
 
         SD = sdreport( obj_spatial )
         SD_nonspatial = sdreport( obj_nonspatial )
-
-        gradients <- c(c(obj_spatial$gr( opt_spatial$par ), obj_nonspatial$gr( opt_nonspatial$par )))
-        if( any(abs(gradients)>0.0001) | SD$pdHess==FALSE | SD_nonspatial$pdHess==FALSE ) stop("Not converged")
 
         sim_rep <- list()
         sim_rep[["sim_data"]] = Sim_List
@@ -281,13 +286,14 @@ for(nyears in unique(N_years)){
 } #designs
 proc.time() - ptm
 
+#Loop through working directory and re-organize results into an array:
 Models <- c("Spatial", "Nonspatial")
 
-sim_results <- array(NA, dim=c(length(Models), length(Designs), length(N_years), length(N_lakes), Nsim, 13, 3),
-                     dimnames=list(c("Spatial","Nonspatial"), c("Balanced","Unbalanced"), c(N_years),
+sim_results <- array(NA, dim=c(length(Models), length(Designs), length(N_years), length(N_lakes), Nsim, 14, 3),
+                     dimnames=list(c("Spatial","Nonspatial"), Designs, c(N_years),
                                    c(N_lakes), paste("Sim=",1:Nsim,sep=""),
                                    c("ln_global_omega", "ln_global_linf", "ln_sd_linf", "global_tzero", "ln_sd_tzero", "b_j_omega1",
-                                     "b_j_omega2", "b_j_omega3", "ln_cv", "ln_kappa", "ln_tau_O", "rho", "ln_sd_omega"),
+                                     "b_j_omega2", "b_j_omega3", "ln_cv", "ln_kappa", "ln_tau_O", "rho", "ln_sd_omega", "sigmaO"),
                                    c("10%","50%","90%")))
 
 for(design in Designs){
@@ -300,9 +306,11 @@ for(replicate in 1:Nsim){
   #spatial model:
   sim_results[Models[1], design, as.character(nyears), as.character(nlakes),
               replicate,c("ln_global_omega", "ln_global_linf", "ln_sd_linf", "global_tzero", "ln_sd_tzero", "b_j_omega1",
-                          "b_j_omega2", "b_j_omega3", "ln_cv", "ln_kappa", "ln_tau_O", "rho"),
-              c("10%","50%","90%")] = sim_rep$opt_spatial$summary[1:length(sim_rep$opt_spatial$par),'Estimate']%o%rep(1,3) +
-              sim_rep$opt_spatial$summary[1:length(sim_rep$opt_spatial$par), 'Std. Error']%o%qnorm(c(0.1,0.5,0.9))
+                          "b_j_omega2", "b_j_omega3", "ln_cv", "ln_kappa", "ln_tau_O", "rho", "sigmaO"),
+              c("10%","50%","90%")] = c(sim_rep$opt_spatial$summary[1:length(sim_rep$opt_spatial$par),'Estimate'],
+                                        sim_rep$opt_spatial$summary[which(row.names(sim_rep$opt_spatial$summary)=="SigmaO"),"Estimate"])%o%rep(1,3) +
+    c(sim_rep$opt_spatial$summary[1:length(sim_rep$opt_spatial$par),'Std. Error'],
+      sim_rep$opt_spatial$summary[which(row.names(sim_rep$opt_spatial$summary)=="SigmaO"),"Std. Error"])%o%qnorm(c(0.1,0.5,0.9))
 
   #nonspatial model:
   sim_results[Models[2], design, as.character(nyears), as.character(nlakes),
@@ -312,15 +320,33 @@ for(replicate in 1:Nsim){
               sim_rep$opt_nonspatial$summary[1:length(sim_rep$opt_nonspatial$par), 'Std. Error']%o%qnorm(c(0.1,0.5,0.9))
 }}}}
 
-#TODO: Plotting!#
+#Plotting
 
-d <-   reshape2::melt(sim_results[c("Spatial", "Nonspatial"),Design[1],as.character(nyears),
-                                  as.character(nlakes), , "b_j_omega1", 1:3])
-d
-p <- ggplot(d, aes(Var1, value))
-p <- p + geom_boxplot()
-p <- p +  geom_hline(aes(yintercept=betas[1]), colour="#990000")
+truth = c("ln_global_omega"=log(beta0), "ln_global_linf"=log(Global_Linf), "ln_sd_linf"=log(SD_linf),
+          "global_tzero"=Global_t0, "ln_sd_tzero"=log(SD_t0), "b_j_omega1"=betas[1],
+          "b_j_omega2"=betas[2], "b_j_omega3"=betas[3], "ln_cv"=log(cv), "ln_kappa"=log(kappa),
+          "rho"=rho, "sigmaO"=SD_O) #"ln_tau_O"=NA, "ln_sd_omega"=NA
+
+d <- reshape2::melt(sim_results[c("Spatial", "Nonspatial"),Designs[1],as.character(N_years),
+                                as.character(nlakes), 1:Nsim,
+                                c("ln_global_omega", "ln_global_linf", "ln_sd_linf",
+                                  "global_tzero", "ln_sd_tzero", "b_j_omega1",
+                                  "b_j_omega2", "b_j_omega3", "ln_cv", "ln_kappa",
+                                   "rho", "sigmaO"), "50%"]) %>% mutate(truth=truth[Var4])
+
+d$Var2 <- as.factor(d$Var2)
+
+p <- ggplot(d, aes(x=Var2, y=value, fill=Var1)) +
+     geom_violin() + scale_fill_manual(values = c(rgb(0,0,0,0.3), rgb(1,1,1,0.3))) +
+     xlab("Number of Years") + ylab("Parameter Value") +
+     stat_summary(fun.y = mean, color = "black", position = position_dodge(.9),
+                  geom = "point", shape = 16, size = 1.5, show.legend = FALSE) +
+     labs(fill = "") + facet_wrap(~Var4, scales="free_y")
+p <- p + ggtitle(paste0(N_lakes," Lakes with Unbalanced Sampling Program"))+ theme(plot.title = element_text(hjust = 0.5))
+p <- p +  geom_hline(aes(yintercept=truth), linetype="dotted", size=1, colour="black")
 p
+
+
 
 
 DF$eps <- spatial_report$eps_i
@@ -340,4 +366,3 @@ p <- group_by(d, year) %>%
      xlab("Easting (km)") + ylab("Northing (km)") +
      scale_color_gradient2()
 p
-
