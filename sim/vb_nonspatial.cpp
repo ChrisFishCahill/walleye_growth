@@ -77,8 +77,6 @@ Type objective_function<Type>::operator() ()
   vector<Type> eta_fixed_i = X_ij_omega * b_j_omega;
 
   vector<Type> length_pred(Nobs);
-  vector<Type> sigma (Nobs);
-  vector<Type> eps_i (Nobs);
 
   // Objective function
   Type jnll = 0;
@@ -124,7 +122,6 @@ Type objective_function<Type>::operator() ()
 
   // Reporting
   REPORT(length_pred);
-  REPORT(eps_i);
 
   return jnll;
 }
