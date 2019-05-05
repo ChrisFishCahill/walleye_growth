@@ -392,7 +392,7 @@ p1 <- p1 +  geom_hline(aes(yintercept=truth), linetype="dotted", size=1, colour=
 p1 <- p1 + geom_jitter(width=0.06)
 p1
 
-ggsave("50_Lakes_Balanced_Data_violin_st.png", p1, scale = 1, width=11, height=8, units=c("in"), dpi = 500 )
+ggsave("50_Lakes_Balanced_Data_violin_st.png", p1, scale = 1, width=11, height=8, units=c("in"), dpi = 600 )
 
 DF$eps <- spatial_report$eps_i
 d <-   reshape2::melt(DF$eps) %>%
