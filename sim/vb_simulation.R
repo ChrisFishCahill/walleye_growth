@@ -52,8 +52,9 @@ Sim_Fn <- function( n_years=nyears, n_stations=nstations, SpatialScale=SpatialSc
       betas[3]*X_ij[ ,t, 3] + eps_st[[t]] #fixed effects + Temporally evolving spatial field
   }
 
-  #Exclude exceedingly low simulated omegas (< 5 cm/year)-could instead use log-linear regression
+  #Exclude exceedingly low simulated omegas (< 5 cm/year)
   Eta_it[which(Eta_it < 5.0)] <- 5.0
+  #could instead use log-linear regression, or change SD_O parameter
 
   #Simulate the assymptotic lengths:
   Epsilon_Linf <- rnorm(n_stations, mean=0, sd=SD_linf)
@@ -121,64 +122,61 @@ Sim_Fn <- function( n_years=nyears, n_stations=nstations, SpatialScale=SpatialSc
   Sim_List
 }
 
-#--------------------
-#Run the simulation:
-#---------------------
+#-----------------------------------------
+#Run the simulation and estimate models
+#-----------------------------------------
 
-#Simulation parameters:
-Age_Range    <- 0:25
+#Sampling and Likelihood parameters:
+Nsim <- 100
+Age_Range <- 0:25
+Nfish <- 50
+N_years <- c(4,7,10,15,20)
+N_lakes <- 50
+
+Likelihood=c("Normal", "Lognormal", "Gamma")
+Likelihood = Likelihood[2]
+
+Designs = c("Balanced", "Unbalanced")
+Designs = Designs[1]
+lakes_good_data <- 0.1 #percent of lakes with good data
+percent_of_data  <- 0.35 #percent of total dataset represented by lakes_good_data
+
+#von B parameters:
 Global_Linf  <- 55.70
 SD_linf      <- 7.41
 Global_t0    <- -1
 SD_t0        <- 0.3
 betas        <- c(-1,0,1)
 beta0        <- 14.79
-kappa        <- 0.5   #c(0.2, 0.5, 0.75)
+cv           <- 0.069
+
+#Spatial-temporal Parameters
+kappa        <- 0.5
 SpatialScale <- 1/kappa
 Range        <- sqrt(8) / kappa
 SD_O         <- 4.66
 rho          <- 0.5
-cv           <- 0.069
-Nfish        <- 50
 
-Likelihood=c("Normal", "Lognormal", "Gamma")
-Likelihood = Likelihood[2]
-
+# Compile & load
 setwd("C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/sim/")
 VersionSpatial = "vb_spdeXar1"
 VersionNonSpatial = "vb_nonspatial"
-
-# Compile
 compile( paste0(VersionSpatial,".cpp") )
 compile( paste0(VersionNonSpatial,".cpp") )
+dyn.load( dynlib(VersionSpatial) )
+dyn.load( dynlib(VersionNonSpatial) )
 
 seed <-  sample.int(1e6, 1)
-set.seed( seed ) #839232
-#Run simulation:
+set.seed( seed ) #416009
 
-N_years <- c(4,7,10,15,20)
-#N_years <- N_years[3:5]
-N_lakes <- c(25,50,80)
-# N_lakes <- N_lakes[2]
-Designs = c("Balanced", "Unbalanced")
-#Designs = Designs[1]
-lakes_good_data <- 0.1 #number of lakes with good data
-percent_of_data  <- 0.35 #percent of total dataset represented by lakes_good_data
-
-Nsim <- 100
-
-seed <-  sample.int(1e6, 1)
-set.seed( seed )
-
+#Run the simulation:
 ptm <- proc.time()
 for(design in Designs){
-for(nyears in unique(N_years)){
-  for(nlakes in unique(N_lakes)){
+  for(nyears in unique(N_years)){
+    for(nlakes in unique(N_lakes)){
     replicate=1
-    dyn.load( dynlib(VersionSpatial) )
-    dyn.load( dynlib(VersionNonSpatial) )
-    while(replicate  < (Nsim+1) ){
-    Sim_List = Sim_Fn( n_years=nyears, n_stations=nlakes, SpatialScale=SpatialScale, SD_O=SD_O,
+    while(replicate < (Nsim+1) ){
+    Sim_List = Sim_Fn( n_years=nyears, n_stations=N_lakes, SpatialScale=SpatialScale, SD_O=SD_O,
  	                     rho=rho, betas=betas, beta0=beta0, cv=cv, Likelihood=Likelihood, Design=design )
 
     DF = Sim_List[["DF"]]
@@ -286,17 +284,14 @@ for(nyears in unique(N_years)){
         replicate <- replicate + 1
 
         if (file.exists("checker.RDA"))
-        file.remove("checker.RDA")
+        file.remove("checker.RDA") #remove object if simulation completes
       } #try
     } #while
-    print(paste(paste("Nlakes", nlakes, sep=" "), "Complete", sep=" "))
-  } #nlakes
-  dyn.unload( dynlib(VersionSpatial) )
-  dyn.unload( dynlib(VersionNonSpatial) )
-} #nyears
+    } #nlakes
+  } #nyears
 } #designs
-proc.time() - ptm
 
+proc.time() - ptm
 
 #Loop through working directory and re-organize results into an array:
 Models <- c("Spatial", "Nonspatial")
@@ -311,28 +306,28 @@ sim_results <- array(NA, dim=c(length(Models), length(Designs), length(N_years),
 for(design in Designs){
 for(nyears in N_years){
 for(nlakes in N_lakes){
-for(replicate in 1:Nsim){
-  file_name <- paste(design, paste(paste0(paste0(nyears, "Years"), nlakes, "Lakes"), paste(replicate,"Replicate.RData",sep=""), sep="_"), sep="_")
+for(rep in 1:Nsim){
+  file_name <- paste(design, paste(paste0(paste0(nyears, "Years"), nlakes, "Lakes"), paste(rep,"Replicate.RData",sep=""), sep="_"), sep="_")
   load( file_name )
 
   #spatial model:
   sim_results[Models[1], design, as.character(nyears), as.character(nlakes),
-              replicate,c("ln_global_omega", "ln_global_linf", "ln_sd_linf", "global_tzero", "ln_sd_tzero", "b_j_omega1",
+              rep,c("ln_global_omega", "ln_global_linf", "ln_sd_linf", "global_tzero", "ln_sd_tzero", "b_j_omega1",
                           "b_j_omega2", "b_j_omega3", "ln_cv", "ln_kappa", "ln_tau_O", "rho", "sigmaO"),
               c("10%","50%","90%")] = c(sim_rep$opt_spatial$summary[1:length(sim_rep$opt_spatial$par),'Estimate'],
                                         sim_rep$opt_spatial$summary[which(row.names(sim_rep$opt_spatial$summary)=="SigmaO"),"Estimate"])%o%rep(1,3) +
-    c(sim_rep$opt_spatial$summary[1:length(sim_rep$opt_spatial$par),'Std. Error'],
-      sim_rep$opt_spatial$summary[which(row.names(sim_rep$opt_spatial$summary)=="SigmaO"),"Std. Error"])%o%qnorm(c(0.1,0.5,0.9))
+              c(sim_rep$opt_spatial$summary[1:length(sim_rep$opt_spatial$par),'Std. Error'],
+              sim_rep$opt_spatial$summary[which(row.names(sim_rep$opt_spatial$summary)=="SigmaO"),"Std. Error"])%o%qnorm(c(0.1,0.5,0.9))
 
   #nonspatial model:
   sim_results[Models[2], design, as.character(nyears), as.character(nlakes),
-              replicate, c("ln_global_omega", "ln_global_linf", "ln_sd_linf", "global_tzero", "ln_sd_tzero", "b_j_omega1",
+              rep, c("ln_global_omega", "ln_global_linf", "ln_sd_linf", "global_tzero", "ln_sd_tzero", "b_j_omega1",
                            "b_j_omega2", "b_j_omega3", "ln_cv", "ln_sd_omega"),
               c("10%","50%","90%")] = sim_rep$opt_nonspatial$summary[1:length(sim_rep$opt_nonspatial$par),'Estimate']%o%rep(1,3) +
               sim_rep$opt_nonspatial$summary[1:length(sim_rep$opt_nonspatial$par), 'Std. Error']%o%qnorm(c(0.1,0.5,0.9))
 }}}}
 
-#Plotting
+#Plot spatial vs. nonspatial:
 
 truth = c("ln_global_omega"=log(beta0), "ln_global_linf"=log(Global_Linf), "ln_sd_linf"=log(SD_linf),
           "global_tzero"=Global_t0, "ln_sd_tzero"=log(SD_t0), "ln_cv"=log(cv), "b_j_omega1"=betas[1],
@@ -343,24 +338,35 @@ d <- reshape2::melt(sim_results[c("Spatial", "Nonspatial"),Designs[1],as.charact
                                 as.character(nlakes), 1:Nsim,
                                 c("ln_global_omega", "ln_global_linf", "ln_sd_linf",
                                   "global_tzero", "ln_sd_tzero", "ln_cv", "b_j_omega1",
-                                  "b_j_omega2", "b_j_omega3"), "50%"]) %>% mutate(truth=truth[Var4])
+                                  "b_j_omega2", "b_j_omega3"), "50%"]) %>%
+              mutate(truth=truth[Var4]) %>%
+              mutate(value=ifelse(grepl("ln", Var4), exp(value), value)) %>%
+              mutate(truth=ifelse(grepl("ln", Var4), exp(truth), truth)) %>%
+              mutate(Var4=stringr::str_remove(Var4, "ln_"))
 
 d$Var2 <- as.factor(d$Var2)
 
+labels <- c(global_omega = "Omega Intercept", cv = "Coefficient of Variation",
+            global_linf= "Linf Intercept", b_j_omega1="Beta 1", b_j_omega2="Beta 2",
+            b_j_omega3="Beta 3", sd_linf="Linf StDev", global_tzero="T0",
+            sd_tzero="T0 StDev")
+
 p <- ggplot(d, aes(x=Var2, y=value, fill=Var1)) +
-     geom_violin() + scale_fill_manual(values = c(rgb(0,0,0,0.3), rgb(1,1,1,0.3))) +
+     geom_boxplot(outlier.alpha=0.2) + scale_fill_manual(values = c(rgb(0,0,0,0.3), rgb(1,1,1,0.3))) +
      xlab("Number of Years") + ylab("Parameter Value") + guides(aes(shape=NA)) +
-     labs(fill = "")  + facet_wrap(~Var4, scales=c("free_y")) +
+     labs(fill = "")  + facet_wrap(~Var4, scales=c("free_y"), labeller=labeller(Var4 = labels)) +
      scale_x_discrete(limits=levels(d$Var2)) + theme(legend.key=element_blank())
 
 p <- p + ggtitle(paste0(N_lakes," Lakes with Balanced Sampling Program"))+ theme(plot.title = element_text(hjust = 0.5))
-p <- p +  geom_hline(aes(yintercept=truth), linetype="dotted", size=1, colour="black")
-p <- p + geom_jitter(position=position_jitterdodge(jitter.width = 0.06, jitter.height = 0,
-                     dodge.width = 0.9, seed = NA), show.legend=F)
+p <- p + geom_hline(aes(yintercept=truth), linetype="dotted", size=1, colour="black")
+# p <- p + geom_jitter(position=position_jitterdodge(jitter.width = 0.25, jitter.height = 0,
+#                       dodge.width = 0.75, seed = NA), alpha = 0.1, show.legend=F)
 p
 
-#-----------------------------
+ggsave("50_Lakes_Balanced_Data_boxplot.png", p, scale = 1, width=11, height=8, units=c("in"), dpi = 500 )
 
+#-----------------------------
+#Plot the spatial model parameters only:
 truth = c("ln_global_omega"=log(beta0), "ln_global_linf"=log(Global_Linf), "ln_sd_linf"=log(SD_linf),
           "global_tzero"=Global_t0, "ln_sd_tzero"=log(SD_t0), "ln_cv"=log(cv), "b_j_omega1"=betas[1],
           "b_j_omega2"=betas[2], "b_j_omega3"=betas[3], "ln_kappa"=log(kappa),
@@ -386,8 +392,7 @@ p1 <- p1 +  geom_hline(aes(yintercept=truth), linetype="dotted", size=1, colour=
 p1 <- p1 + geom_jitter(width=0.06)
 p1
 
-
-
+ggsave("50_Lakes_Balanced_Data_violin_st.png", p1, scale = 1, width=11, height=8, units=c("in"), dpi = 500 )
 
 DF$eps <- spatial_report$eps_i
 d <-   reshape2::melt(DF$eps) %>%
