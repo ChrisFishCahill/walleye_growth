@@ -118,26 +118,18 @@ for(k in to){
   #nine total lakes in partition == K
   if(k == max(to)) Partition_i = ifelse(data$Lake %in% lakes_to_predict[k:(k + by)],1,0)
 
-  data_nonspatial = list("Nobs"=nrow(data), "length_i"=data$TL, "age_i" = data$Age,
-                         "lake_i" = data$Lake - 1, "X_ij_omega"= model.matrix(~ -1 + data$wallEffDen.Std +
-                                                                                data$compEffDen.Std +
-                                                                                data$GDD.Std  +
-                                                                                data$wallEffDen.Std:data$compEffDen.Std),
-                         "sex_i" = data$SexCode,"Nlakes" = length(unique(data$Lake)),"CTL" = CTL,
-                         "predTF_i"=Partition_i)
+  data_nonspatial = list("Nobs" = nrow(data), "length_i" = data$TL, "age_i" = data$Age,
+                         "lake_i" = data$Lake - 1,
+                         "X_ij_omega" = model.matrix(~ -1 + data$wallEffDen.Std + data$compEffDen.Std +
+                                                      data$GDD.Std  + data$wallEffDen.Std:data$compEffDen.Std),
+                         "sex_i" = data$SexCode,"Nlakes" = length(unique(data$Lake)),"CTL" = CTL, "predTF_i"=Partition_i)
 
-  data_spatial = list("Nobs"      = nrow(data), "length_i"=data$TL, "age_i" = data$Age,
-                      "lake_i"    = data$Lake - 1, "sex_i" = data$SexCode,
-                      "X_ij_omega"= model.matrix(~ -1 + data$wallEffDen.Std + #.Std --> already standardized
-                                                   data$compEffDen.Std +
-                                                   data$GDD.Std  +
-                                                   data$wallEffDen.Std:data$compEffDen.Std),
-                      "Nlakes" = length(unique(data$Lake)),
-                      "spdeMatrices" = spdeMatrices,
-                      "s_i" = data$Lake-1,
-                      "t_i" = data$Year-1,
-                      "CTL" = CTL,
-                      "predTF_i"=Partition_i)
+  data_spatial = list("Nobs" = nrow(data), "length_i" = data$TL, "age_i" = data$Age,
+                      "lake_i" = data$Lake - 1, "sex_i" = data$SexCode,
+                      "X_ij_omega"= model.matrix(~ -1 + data$wallEffDen.Std + data$compEffDen.Std +
+                                                   data$GDD.Std + data$wallEffDen.Std:data$compEffDen.Std),
+                      "Nlakes" = length(unique(data$Lake)), "spdeMatrices" = spdeMatrices, "s_i" = data$Lake-1,
+                      "t_i" = data$Year-1, "CTL" = CTL, "predTF_i"=Partition_i)
 
   parameters_nonspatial = list("ln_global_omega" = log(14),
                                "ln_global_linf" = log(45), "ln_sd_linf" = log(7), "global_tzero" = -1,
@@ -169,6 +161,7 @@ for(k in to){
                                        getsd=T, newtonsteps=1, bias.correct=F)
 
   rep_nonspatial <- obj_nonspatial$report()
+  rep_nonspatial$RMSE
 
   #fit the spatial model:
   obj_spatial <- MakeADFun(data=data_spatial, parameters=parameters_spatial,
@@ -182,8 +175,8 @@ for(k in to){
   rep_spatial <- obj_spatial$report()
 
   #Record the results
-  nonspatial[which(to==k)] <- rep_nonspatial$pred_jnll / sum(Partition_i)
-  spatial[which(to==k)] <- rep_spatial$pred_jnll / sum(Partition_i)
+  nonspatial[which(to==k)] <- rep_nonspatial$RMSE
+  spatial[which(to==k)] <- rep_spatial$RMSE
 
   print(which(to==k))
 }
@@ -196,26 +189,18 @@ for(k in unique(data$Lake)){
   #which lake to predict:
   Partition_i = ifelse(data$Lake==k,1,0)
 
-  data_nonspatial = list("Nobs"=nrow(data), "length_i"=data$TL, "age_i" = data$Age,
-                         "lake_i" = data$Lake - 1, "X_ij_omega"= model.matrix(~ -1 + data$wallEffDen.Std +
-                                                                                data$compEffDen.Std +
-                                                                                data$GDD.Std  +
-                                                                                data$wallEffDen.Std:data$compEffDen.Std),
-                         "sex_i" = data$SexCode,"Nlakes" = length(unique(data$Lake)),"CTL" = CTL,
-                         "predTF_i"=Partition_i)
+  data_nonspatial = list("Nobs" = nrow(data), "length_i" = data$TL, "age_i" = data$Age,
+                         "lake_i" = data$Lake - 1,
+                         "X_ij_omega" = model.matrix(~ -1 + data$wallEffDen.Std + data$compEffDen.Std +
+                                                       data$GDD.Std  + data$wallEffDen.Std:data$compEffDen.Std),
+                         "sex_i" = data$SexCode,"Nlakes" = length(unique(data$Lake)),"CTL" = CTL, "predTF_i"=Partition_i)
 
-  data_spatial = list("Nobs"      = nrow(data), "length_i"=data$TL, "age_i" = data$Age,
-                      "lake_i"    = data$Lake - 1, "sex_i" = data$SexCode,
-                      "X_ij_omega"= model.matrix(~ -1 + data$wallEffDen.Std + #.Std --> already standardized
-                                                   data$compEffDen.Std +
-                                                   data$GDD.Std  +
-                                                   data$wallEffDen.Std:data$compEffDen.Std),
-                      "Nlakes" = length(unique(data$Lake)),
-                      "spdeMatrices" = spdeMatrices,
-                      "s_i" = data$Lake-1,
-                      "t_i" = data$Year-1,
-                      "CTL" = CTL,
-                      "predTF_i"=Partition_i)
+  data_spatial = list("Nobs" = nrow(data), "length_i" = data$TL, "age_i" = data$Age,
+                      "lake_i" = data$Lake - 1, "sex_i" = data$SexCode,
+                      "X_ij_omega"= model.matrix(~ -1 + data$wallEffDen.Std + data$compEffDen.Std +
+                                                   data$GDD.Std + data$wallEffDen.Std:data$compEffDen.Std),
+                      "Nlakes" = length(unique(data$Lake)), "spdeMatrices" = spdeMatrices, "s_i" = data$Lake-1,
+                      "t_i" = data$Year-1, "CTL" = CTL, "predTF_i"=Partition_i)
 
   parameters_nonspatial = list("ln_global_omega" = log(14),
                                "ln_global_linf" = log(45), "ln_sd_linf" = log(7), "global_tzero" = -1,
@@ -260,8 +245,8 @@ for(k in unique(data$Lake)){
   rep_spatial <- obj_spatial$report()
 
   #Record the results
-  loo_nonspatial[k] <- rep_nonspatial$pred_jnll / sum(Partition_i)
-  loo_spatial[k] <- rep_spatial$pred_jnll / sum(Partition_i)
+  loo_nonspatial[k] <- rep_nonspatial$RMSE
+  loo_spatial[k] <- rep_spatial$RMSE
   print(k)
 }
 

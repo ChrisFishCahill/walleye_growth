@@ -84,10 +84,14 @@ Type objective_function<Type>::operator() ()
   vector<Type> eps_i (Nobs);
 
   // Objective function
+  Type jnll = 0;
+  Type Squared_Errors = 0;
+
   vector<Type> jnll_i(Nobs);
   jnll_i.setZero();
-  Type jnll = 0;
-  Type pred_jnll = 0;
+
+  vector<Type> Squared_Errors_i(Nobs);
+  Squared_Errors_i.setZero();
 
   // Probability of random coefficients:
   for(int l=0; l<Nlakes; l++){
@@ -127,14 +131,19 @@ Type objective_function<Type>::operator() ()
       //Gamma
       if( !isNA(length_i(i)) ) jnll_i(i) -= dgamma( length_i(i), 1/pow(exp(ln_cv),2), length_pred(i)*pow(exp(ln_cv),2), true ); ;
     }
+    Squared_Errors_i(i) = pow(length_i(i) - length_pred(i),2);
     // Running counter
     if( predTF_i(i)==0 ) jnll += jnll_i(i);
-    if( predTF_i(i)==1 ) pred_jnll += jnll_i(i);
+    //if( predTF_i(i)==1 ) pred_jnll += jnll_i(i); --> pred_jnll inconsistent EBHM as per Anderson pers. comm.
+    if(predTF_i(i)==1) Squared_Errors += Squared_Errors_i(i);
   }
+
+  Type RMSE = pow(Squared_Errors / predTF_i.sum(), 0.5);
 
   // Reporting
   REPORT(length_pred);
-  REPORT( pred_jnll );
+  //REPORT( pred_jnll );
+  REPORT( RMSE );
   REPORT( jnll_i );
 
   return jnll;
