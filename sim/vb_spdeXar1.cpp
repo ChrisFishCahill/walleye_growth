@@ -59,6 +59,7 @@ Type objective_function<Type>::operator() ()
   DATA_IVECTOR( t_i );         //Random effect index for year(t)
 
   DATA_INTEGER( CTL );         //Control for likelihood
+  DATA_VECTOR( predTF_i );     //indicator for training(0) or prediction(1)
 
   //Parameters
   PARAMETER(ln_global_omega);
@@ -92,6 +93,12 @@ Type objective_function<Type>::operator() ()
 
   // Objective function
   Type jnll = 0;
+  Type pred_jnll = 0;
+  Type Squared_ln_Errors = 0;
+  Type Squared_Errors = 0;
+
+  vector<Type> jnll_i(Nobs);
+  jnll_i.setZero();
 
   // Derived quantities
   Type Range = sqrt(8) / exp( ln_kappa );
@@ -129,23 +136,37 @@ Type objective_function<Type>::operator() ()
     //CYO likelihood
     if(CTL == 1){
      //Normal
-     if( !isNA(length_i(i)) ) jnll -= dnorm( length_i(i), length_pred(i), exp(ln_cv)*length_pred(i), true );
+     if( !isNA(length_i(i)) ) jnll_i(i) -= dnorm( length_i(i), length_pred(i), exp(ln_cv)*length_pred(i), true );
     }
     if(CTL == 2){
      //Lognormal
-     if( !isNA(length_i(i)) ) jnll -= dlnorm(length_i(i), log(length_pred(i)) - pow(exp(ln_cv), 2)/2, exp(ln_cv), true );
+     if( !isNA(length_i(i)) ) jnll_i(i) -= dlnorm(length_i(i), log(length_pred(i)) - pow(exp(ln_cv), 2)/2, exp(ln_cv), true );
     }
     if(CTL == 3){
      //Gamma
-     if( !isNA(length_i(i)) ) jnll -= dgamma( length_i(i), 1/pow(exp(ln_cv),2), length_pred(i)*pow(exp(ln_cv),2), true ); ;
+     if( !isNA(length_i(i)) ) jnll_i(i) -= dgamma( length_i(i), 1/pow(exp(ln_cv),2), length_pred(i)*pow(exp(ln_cv),2), true ); ;
+    }
+    // Running counter
+    if( predTF_i(i)==0 ) jnll += jnll_i(i); //estimation
+
+    if(predTF_i(i)==1){ //prediction
+      Squared_ln_Errors +=  pow((log(length_i(i) + 1.0) - log(length_pred(i) + 1.0)),2);
+      Squared_Errors +=  pow((length_i(i) - length_pred(i)),2);
+      pred_jnll += jnll_i(i);
     }
   }
+
+  Type RMSLE = pow(Squared_ln_Errors / predTF_i.sum(), 0.5);
+  Type RMSE = pow(Squared_Errors / predTF_i.sum(), 0.5);
 
   // Reporting
   REPORT(Range);
   ADREPORT(SigmaO);
   REPORT(length_pred);
   REPORT(eps_i);
+  REPORT(pred_jnll);
+  REPORT(RMSLE);
+  REPORT(RMSE);
 
   return jnll;
 }
