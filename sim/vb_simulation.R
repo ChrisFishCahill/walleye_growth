@@ -212,7 +212,7 @@ for(design in Designs){
                         "lake_i" = DF$Lake - 1,
                         "X_ij_omega"= model.matrix(~ -1 + DF$x1 + DF$x2 + DF$x3),
                         "Nlakes" =  length(unique(DF$Lake)),
-                        "spdeMatrices" = spdeMatrices, "CTL" = CTL, "predTF"=rep(0, nrow(DF)),
+                        "spdeMatrices" = spdeMatrices, "CTL" = CTL, "predTF_i"=rep(0, nrow(DF)),
                         "s_i" = DF$Lake-1,
                         "t_i" = DF$Year-1 )
 
@@ -220,7 +220,7 @@ for(design in Designs){
 
     data_nonspatial = list("Nobs"=nrow(DF), "length_i"=DF$Simulated_Length, "age_i" = DF$Age,
                            "lake_i" = DF$Lake - 1, "X_ij_omega"= model.matrix(~ -1 + DF$x1 + DF$x2 + DF$x3),
-                           "Nlakes" =  length(unique(DF$Lake)),"CTL" = CTL, "predTF"=rep(0, nrow(DF)) )
+                           "Nlakes" =  length(unique(DF$Lake)),"CTL" = CTL, "predTF_i"=rep(0, nrow(DF)) )
 
     parameters_spatial = list("ln_global_omega" = log(beta0), "ln_global_linf" = log(Global_Linf),
                                "ln_sd_linf" = log(SD_linf), "global_tzero" = Global_t0, "ln_sd_tzero" = log(SD_t0),
