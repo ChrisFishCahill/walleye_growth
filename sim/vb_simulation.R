@@ -508,8 +508,8 @@ nonspatial_balanced <- sub.d %>%
   dplyr::group_by(Design, Nyears) %>%
   summarize(Coverage = sum(na.exclude(Covered)) / (length(Covered)-sum(is.na(Covered))))
 
-spatial_balanced
-nonspatial_balanced
+spatial_balanced$Coverage
+nonspatial_balanced$Coverage
 
 #Coverage unbalanced:
 sub.d <- d[which(d$Design=="Unbalanced" & d$Model=="Spatial"),]
@@ -524,8 +524,8 @@ nonspatial_unbalanced <- sub.d %>%
   dplyr::group_by(Design, Nyears) %>%
   summarize(Coverage = sum(na.exclude(Covered)) / (length(Covered)-sum(is.na(Covered))))
 
-spatial_unbalanced
-nonspatial_unbalanced
+spatial_unbalanced$Coverage
+nonspatial_unbalanced$Coverage
 
 #----------------------------------------
 #Quick and dirty conditional AIC comparison--not correct and should use REML to compare models
