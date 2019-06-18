@@ -294,13 +294,14 @@ proc.time() - ptm
 
 #Loop through working directory and re-organize results into an array:
 Models <- c("Spatial", "Nonspatial")
+Designs <- c("Balanced", "Unbalanced")
 
 sim_results <- array(NA, dim=c(length(Models), length(Designs), length(N_years), length(N_lakes), Nsim, 14, 3),
                      dimnames=list(c("Spatial","Nonspatial"), Designs, c(N_years),
                                    c(N_lakes), paste("Sim=",1:Nsim,sep=""),
                                    c("ln_global_omega", "ln_global_linf", "ln_sd_linf", "global_tzero", "ln_sd_tzero", "b_j_omega1",
                                      "b_j_omega2", "b_j_omega3", "ln_cv", "ln_kappa", "ln_tau_O", "rho", "ln_sd_omega", "sigmaO"),
-                                   c("10%","50%","90%")))
+                                   c("2.5%","50%","97.5%")))
 
 for(design in Designs){
 for(nyears in N_years){
@@ -313,17 +314,17 @@ for(rep in 1:Nsim){
   sim_results[Models[1], design, as.character(nyears), as.character(nlakes),
               rep,c("ln_global_omega", "ln_global_linf", "ln_sd_linf", "global_tzero", "ln_sd_tzero", "b_j_omega1",
                           "b_j_omega2", "b_j_omega3", "ln_cv", "ln_kappa", "ln_tau_O", "rho", "sigmaO"),
-              c("10%","50%","90%")] = c(sim_rep$opt_spatial$summary[1:length(sim_rep$opt_spatial$par),'Estimate'],
+              c("2.5%","50%","97.5%")] = c(sim_rep$opt_spatial$summary[1:length(sim_rep$opt_spatial$par),'Estimate'],
                                         sim_rep$opt_spatial$summary[which(row.names(sim_rep$opt_spatial$summary)=="SigmaO"),"Estimate"])%o%rep(1,3) +
               c(sim_rep$opt_spatial$summary[1:length(sim_rep$opt_spatial$par),'Std. Error'],
-              sim_rep$opt_spatial$summary[which(row.names(sim_rep$opt_spatial$summary)=="SigmaO"),"Std. Error"])%o%qnorm(c(0.1,0.5,0.9))
+              sim_rep$opt_spatial$summary[which(row.names(sim_rep$opt_spatial$summary)=="SigmaO"),"Std. Error"])%o%qnorm(c(0.025,0.5,0.975))
 
   #nonspatial model:
   sim_results[Models[2], design, as.character(nyears), as.character(nlakes),
               rep, c("ln_global_omega", "ln_global_linf", "ln_sd_linf", "global_tzero", "ln_sd_tzero", "b_j_omega1",
                            "b_j_omega2", "b_j_omega3", "ln_cv", "ln_sd_omega"),
-              c("10%","50%","90%")] = sim_rep$opt_nonspatial$summary[1:length(sim_rep$opt_nonspatial$par),'Estimate']%o%rep(1,3) +
-              sim_rep$opt_nonspatial$summary[1:length(sim_rep$opt_nonspatial$par), 'Std. Error']%o%qnorm(c(0.1,0.5,0.9))
+              c("2.5%","50%","97.5%")] = sim_rep$opt_nonspatial$summary[1:length(sim_rep$opt_nonspatial$par),'Estimate']%o%rep(1,3) +
+              sim_rep$opt_nonspatial$summary[1:length(sim_rep$opt_nonspatial$par), 'Std. Error']%o%qnorm(c(0.025,0.5,0.975))
 }}}}
 
 #Plot spatial vs. nonspatial:
@@ -464,3 +465,112 @@ p1
 p2 <- ggpubr::ggarrange(p, p1, labels = c("Truth", "Estimated"))
 
 ggsave("RandomField.png", p2)
+
+
+#----------------------------------------
+#Coverage
+
+d <- reshape2::melt(sim_results[c("Spatial", "Nonspatial"),Designs,as.character(N_years),
+                                as.character(nlakes), 1:Nsim,
+                                c("ln_global_omega", "ln_global_linf", "ln_sd_linf",
+                                  "global_tzero", "ln_sd_tzero", "ln_cv", "b_j_omega1",
+                                  "b_j_omega2", "b_j_omega3", "ln_kappa", "rho", "sigmaO"), "2.5%"],
+                    varnames=c("Model", "Design", "Nyears", "Replicate",
+                               "Parameter"), value.name="Lower" )
+d1 <- reshape2::melt(sim_results[c("Spatial", "Nonspatial"),Designs,as.character(N_years),
+                              as.character(nlakes), 1:Nsim,
+                              c("ln_global_omega", "ln_global_linf", "ln_sd_linf",
+                                "global_tzero", "ln_sd_tzero", "ln_cv", "b_j_omega1",
+                                "b_j_omega2", "b_j_omega3", "ln_kappa", "rho", "sigmaO"), "97.5%"],
+                     varnames=c("Model", "Design", "Nyears", "Replicate",
+                                "Parameter"), value.name="Upper")
+
+d <- left_join(d,d1) %>%
+  mutate(Truth=truth[Parameter]) %>%
+  mutate(Lower=ifelse(grepl("ln", Parameter), exp(Lower), Lower)) %>%
+  mutate(Upper=ifelse(grepl("ln", Parameter), exp(Upper), Upper)) %>%
+  mutate(Truth=ifelse(grepl("ln", Parameter), exp(Truth), Truth)) %>%
+  mutate(Parameter=stringr::str_remove(Parameter, "ln_")) %>%
+  mutate(Covered=Truth >= Lower & Truth <= Upper)
+
+d$Nyears <- as.factor(d$Nyears)
+
+#Coverage balanced:
+sub.d <- d[which(d$Design=="Balanced" & d$Model=="Spatial"),]
+
+spatial_balanced <- sub.d %>%
+  dplyr::group_by(Design, Nyears) %>%
+  summarize(Coverage = sum(Covered) / length(Covered))
+
+sub.d <- d[which(d$Design=="Balanced" & d$Model=="Nonspatial"),]
+
+nonspatial_balanced <- sub.d %>%
+  dplyr::group_by(Design, Nyears) %>%
+  summarize(Coverage = sum(na.exclude(Covered)) / (length(Covered)-sum(is.na(Covered))))
+
+spatial_balanced
+nonspatial_balanced
+
+#Coverage unbalanced:
+sub.d <- d[which(d$Design=="Unbalanced" & d$Model=="Spatial"),]
+
+spatial_unbalanced <- sub.d %>%
+  dplyr::group_by(Design, Nyears) %>%
+  summarize(Coverage = sum(Covered) / length(Covered))
+
+sub.d <- d[which(d$Design=="Unbalanced" & d$Model=="Nonspatial"),]
+
+nonspatial_unbalanced <- sub.d %>%
+  dplyr::group_by(Design, Nyears) %>%
+  summarize(Coverage = sum(na.exclude(Covered)) / (length(Covered)-sum(is.na(Covered))))
+
+spatial_unbalanced
+nonspatial_unbalanced
+
+#----------------------------------------
+#Quick and dirty conditional AIC comparison--not correct and should use REML to compare models
+#with different random effect structures, where all non-variance parameters are integrated out
+#via Laplace--see Pinhero and Bates.
+#----------------------------------------
+
+Models <- c("Spatial", "Nonspatial")
+
+sim_results <- array(NA, dim=c(length(Models), length(Designs), length(N_years), length(N_lakes), Nsim, 1),
+                     dimnames=list(c("Spatial","Nonspatial"), Designs, c(N_years),
+                                   c(N_lakes), paste("Sim=",1:Nsim,sep=""),
+                                   "AIC"))
+
+for(design in Designs){
+  for(nyears in N_years){
+    for(nlakes in N_lakes){
+      for(rep in 1:Nsim){
+        file_name <- paste(design, paste(paste0(paste0(nyears, "Years"), nlakes, "Lakes"), paste(rep,"Replicate.RData",sep=""), sep="_"), sep="_")
+        load( file_name )
+
+        #spatial model:
+        sim_results[Models[1], design, as.character(nyears), as.character(nlakes), rep,
+                   "AIC"] = sim_rep$opt_spatial$AIC
+
+        #nonspatial model:
+        sim_results[Models[2], design, as.character(nyears), as.character(nlakes), rep,
+                    "AIC"] = sim_rep$opt_nonspatial$AIC
+}}}}
+dim(sim_results)
+sim_results[Models[1],,,,,"AIC"]
+
+#Plot the spatial model parameters only for balanced and unbalanced:
+d <- reshape2::melt(sim_results[c("Spatial", "Nonspatial"),Designs,as.character(N_years),
+                                as.character(nlakes), 1:Nsim,
+                                "AIC"], varnames=c("Model", "Nyears", "Simulation"), value.name= "AIC")
+d$Nyears <- as.factor(d$Nyears)
+head(d)
+
+#Unbalanced data
+p <- ggplot(d, aes(x=Nyears, y=AIC, fill=Model)) +
+  geom_boxplot(outlier.alpha=0.2) + scale_fill_manual(values = c(rgb(0,0,0,0.3), rgb(1,1,1,0.3))) +
+  xlab("Number of Years") + ylab("AIC Value") + guides(aes(shape=NA)) +
+  labs(fill = "") +
+  scale_x_discrete(limits=levels(d$Nyears)) + theme(legend.key=element_blank())
+p
+
+#End End End
