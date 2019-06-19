@@ -27,6 +27,15 @@
 # if(CTL == 3 == Gamma)
 #
 #Cahill ^(;,;)^ March 2019
+#TODO fix lake situation
+#     unscrew the stupid lognormal/gamma/normal
+#     cross validation stuff once first two are complete.
+#     REML vs. ML
+#     Likelihoods (ML)
+#     Record parameter estimates all model runs
+#     Create plots of nonspatial vs. spatial
+#
+
 #-------------------------------------------------------------------------------------------------------------------
 
 library(dplyr)
@@ -51,16 +60,15 @@ loc_xy <- loc_xy/1000 #Put distance in kms
 
 mesh = inla.mesh.create( loc_xy, refine=TRUE, extend=-0.5, cutoff=0.01 )
 
-png(file="plots/Mesh.png",width=9.50,height=7.00,units="in",res=600)
+# png(file="plots/Mesh.png",width=9.50,height=7.00,units="in",res=600)
 plot(mesh)
 points(loc_xy, col="Steelblue", pch=1)
-dev.off()
+# dev.off()
 
-#This mesh is ugly as sin, but gives the same answers as the more complex meshes
 #-------------------------------------------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------------------------------------------
 
-# Extra meshes:
+# Other meshes to try:
 
 # RangeGuess <- 30    #~ 1/3 study area
 # MaxEdge    <- RangeGuess/ 5 #as per https://haakonbakka.bitbucket.io/btopic104.html
@@ -80,80 +88,109 @@ dev.off()
 
 #-------------------------------------------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------------------------------------------
+#nonspatial model:
+VersionNonSpatial = "vb_nonspatial"
+compile(paste0(VersionNonSpatial, ".cpp"))
+dyn.load( dynlib(VersionNonSpatial) )
+
+random_nonspatial = c("eps_linf", "eps_t0", "eps_omega")
+
+CTL = 1
 
 #Create the inputs for TMB and run the model
-
-Version = "spdeXAR1_v3"
-compile(paste0(Version, ".cpp"))
-dyn.load( dynlib(Version) )
-
 spde = inla.spde2.matern( mesh )
 
 spdeMatrices = spde$param.inla[c("M0","M1","M2")]
 
-Data = list("Nobs"      = nrow(data), "length_i"=data$TL, "age_i" = data$Age,
-            "lake_i"    = data$Lake - 1, "sex_i" = data$SexCode,
-            "X_ij_omega"= model.matrix(~ -1 + data$wallEffDen.Std + #.Std --> already standardized
-                                              data$compEffDen.Std +
-                                              data$GDD.Std  +
-                                              data$wallEffDen.Std:data$compEffDen.Std),
-            "Nlakes" = length(unique(data$Lake)),
-            "spdeMatrices" = spdeMatrices,
-            "s_i" = data$Lake-1,
-            "t_i" = data$Year-1,
-            "n_t" = max(data$Year),
-            "t_prev_i" = data$Year-2,
-            "CTL" = 2  #CTL==1 --> Normal, 2 --> Lognormal, 3 --> Gamma
-)
+random_spatial = c("eps_omega_st", "eps_linf", "eps_t0")
 
 
-Parameters = list("ln_global_omega"  = log(13.28954),
-                  "ln_global_linf"   = log(55),
-                  "ln_sd_linf"       = log(7.275452),
-		  "global_tzero"     = -1.260783461,
-                  "ln_sd_tzero"      = log(0.538755),
-                  "ln_b_sex"         = log(4.760871),
-                  "b_j_omega"        = rep(0, ncol(Data$X_ij_omega)),
-                  "eps_omega_st"     = matrix(0,  nrow=mesh$n,ncol=Data$n_t ),
-                  "eps_linf"         = rep(0,  length(unique(data$Lake))),
-		  "eps_t0"           = rep(0, length(unique(data$Lake))),
-		  "ln_cv"            = -2.5043055,
-		  "ln_kappa"         = -2,
-		  "ln_tau_O"         = -5,
-		  "rho_unscaled"     = 2 * plogis(0.6) - 1 # --> 2 * plogis(your_rho_guess) - 1
-)
+VersionSpatial = "spdeXAR1_v3"
+compile(paste0(VersionSpatial, ".cpp"))
+dyn.load( dynlib(VersionSpatial) )
 
-Random = c("eps_omega_st", "eps_linf", "eps_t0")
-Use_REML = FALSE
-if( Use_REML==TRUE ) Random = union( Random, c("ln_global_omega", "ln_global_linf",
-                                    "global_tzero","ln_b_sex", "b_j_omega") )
+data_nonspatial = list("Nobs"=nrow(data), "length_i"=data$TL, "age_i" = data$Age,
+                        "lake_i" = data$Lake - 1, "X_ij_omega"= model.matrix(~ -1 + data$wallEffDen.Std +
+                                                                               data$compEffDen.Std +
+                                                                               data$GDD.Std  +
+                                                                               data$wallEffDen.Std:data$compEffDen.Std),
+                       "sex_i" = data$SexCode,"Nlakes" = length(unique(data$Lake)),"CTL" = CTL,
+                       "predTF_i"=rep(0, nrow(data)))
 
-Obj <- MakeADFun(data=Data, parameters=Parameters, random=Random, hessian=FALSE, map=NULL)
+parameters_nonspatial = list("ln_global_omega" = log(14),
+                             "ln_global_linf" = log(45), "ln_sd_linf" = log(7), "global_tzero" = -1,
+                             "ln_sd_tzero" = log(3), "ln_b_sex" = log(4.760871), "b_j_omega" = rep(0, ncol(data_nonspatial$X_ij_omega)),
+                             "eps_omega" = rep(0, data_nonspatial$Nlakes ), "eps_linf" = rep(0, data_nonspatial$Nlakes ),
+                             "eps_t0" = rep(0, data_nonspatial$Nlakes ),"ln_cv" = log(0.2), "ln_sd_omega" = log(4.5) )
 
-Obj$fn( Obj$par )
-Obj$gr( Obj$par )
+Use_REML=F
+if( Use_REML==TRUE ) random_nonspatial = union( random_nonspatial, c("ln_global_omega",
+                                                                     "ln_global_linf", "global_tzero",
+                                                                     "ln_b_sex", "b_j_omega") )
 
-#Runs in 4.3 minutes on my laptop
-Opt  = TMBhelper::Optimize(obj=Obj,
-			   control=list(eval.max=1000, iter.max=1000),
-			   getsd=T, newtonsteps=1, bias.correct=F)
+obj_nonspatial <- MakeADFun(data=data_nonspatial, parameters=parameters_nonspatial,
+                            random=random_nonspatial, hessian=FALSE, DLL=VersionNonSpatial)
 
-Opt
+opt_nonspatial1 = TMBhelper::Optimize(obj=obj_nonspatial,
+                                     control=list(eval.max=1000, iter.max=1000),
+                                     getsd=T, newtonsteps=1, bias.correct=F)
+
+rep_nonspatial <- obj_nonspatial$report()
+
+data_spatial = list("Nobs" = nrow(data), "length_i"=data$TL, "age_i" = data$Age,
+                    "lake_i" = data$Lake - 1, "sex_i" = data$SexCode,
+                    "X_ij_omega"= model.matrix(~ -1 + data$wallEffDen.Std + #.Std --> already standardized
+                                                 data$compEffDen.Std + data$GDD.Std  +
+                                                 data$wallEffDen.Std:data$compEffDen.Std),
+                    "Nlakes" = length(unique(data$Lake)), "spdeMatrices" = spdeMatrices,
+                    "s_i" = data$Lake-1, "t_i" = data$Year-1, "CTL" = CTL, "predTF_i"=rep(0, nrow(data)))
+
+
+parameters_spatial = list("ln_global_omega" = log(13.28954),
+                          "ln_global_linf" = log(55),
+                          "ln_sd_linf" = log(7.275452),
+                          "global_tzero" = -1.260783461,
+                          "ln_sd_tzero" = log(0.538755),
+                          "ln_b_sex" = log(4.760871),
+                          "b_j_omega" = rep(0, ncol(data_spatial$X_ij_omega)),
+                          "eps_omega_st" = matrix(0,  nrow=mesh$n,ncol=max(data$Year) ),
+                          "eps_linf" = rep(0,  length(unique(data$Lake))),
+                          "eps_t0" = rep(0, length(unique(data$Lake))),
+                          "ln_cv" = -2.5043055,
+                          "ln_kappa" = -2.7,
+                          "ln_tau_O" = 0,
+                          "rho" = 0.9 )
+
+random_spatial = c("eps_omega_st", "eps_linf", "eps_t0")
+
+Use_REML = F
+if( Use_REML==TRUE ) random_spatial = union( random_spatial, c("ln_global_omega",
+                                                               "ln_global_linf", "global_tzero",
+                                                               "ln_b_sex", "b_j_omega") )
+
+obj_spatial = MakeADFun(data=data_spatial, parameters=parameters_spatial,
+                         random=random_spatial, hessian=FALSE, DLL=VersionSpatial)
+
+opt_spatial  = TMBhelper::Optimize(obj=obj_spatial,
+                                   control=list(eval.max=1000, iter.max=1000),
+                                   getsd=T, newtonsteps=1, bias.correct=F,
+                                   lower=c(rep(-Inf,13),-0.999), upper=c(rep(Inf,13),0.999))
+
+
 #estimates/standard errors appear reasonable
 
-SD = sdreport( Obj )
-final_gradient = Obj$gr( Opt$par )
+SD = sdreport( obj_spatial )
+final_gradient = obj_spatial$gr( opt_spatial$par )
 if( any(abs(final_gradient)>0.0001) | SD$pdHess==FALSE ) stop("Not converged")
 
 #Extract the intercept and SE
-ParHat = as.list( Opt$SD, "Estimate" )
-SEHat  = as.list( Opt$SD, "Std. Error" )
+ParHat = as.list( opt_spatial$SD, "Estimate" )
+SEHat  = as.list( opt_spatial$SD, "Std. Error" )
 
-rep <- Obj$report()
+rep <- obj_spatial$report()
 
-Range <- Opt$SD["value"]$value[which(names(Opt$SD["value"]$value)=="Range")]
-rho <- Opt$SD["value"]$value[which(names(Opt$SD["value"]$value)=="rho")]
-#Opt$SD$sd
+Range <- opt_spatial$SD["value"]$value[which(names(opt_spatial$SD["value"]$value)=="Range")]
+rho <- opt_spatial$SD["value"]$value[which(names(opt_spatial$SD["value"]$value)=="rho")]
 Range
 rho
 
@@ -161,6 +198,27 @@ hist(dist(loc_xy), xlab="Distance between Lakes (km)", main="")
 abline(v=Range, lty=3, lwd=3, col="Steelblue")
 # Range (14 km) is pretty small given most sites are not within that distance:
 # perhaps not that surprising...
+data$eps <- rep$eps_i
+
+data$E2 <- (data$TL - rep$length_pred)^2
+
+d <-   reshape2::melt(data$E2)       %>%
+  mutate(WBID=data$WBID,
+         x = data$X_TTM_c/1000,
+         y = data$Y_TTM_c/1000,
+         year = data$Year,
+         eps = data$eps )	     %>%
+  group_by(WBID, year)
+
+
+#Plot eps_i (st raneffs of the lakes) through time x Space:
+p <- ggplot(d, aes(x, y, col =eps )) + geom_point() +
+  facet_wrap(~year) +
+  xlab("Easting (km)") + ylab("Northing (km)") +
+  scale_color_gradient2()
+p
+
+ggsave("plots/SpaceTimeField.png", p, dpi=600, width=9, height=8, units=c("in"))
 
 #-------------------------------------------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------------------------------------------
@@ -203,9 +261,9 @@ for(i in 1:nrow(data)) {
 
 	lpred = linf*(1-exp(-(omega/linf) * (data$Age[i] - t0 )))
 	sigma = CV*lpred
-	if(Data$CTL==1) {pred_dist[i, 1:Nsim] = rnorm(Nsim, lpred, sigma)}
-	if(Data$CTL==2) {pred_dist[i, 1:Nsim] = rlnorm(Nsim, 	log(lpred) - sigma^2/2, sigma)}
-	if(Data$CTL==3) {pred_dist[i, 1:Nsim] = rgamma(Nsim, shape=1/CV^2, scale=lpred*CV^2)}
+	if(data_spatial$CTL==1) {pred_dist[i, 1:Nsim] = rnorm(Nsim, lpred, sigma)}
+	if(data_spatial$CTL==2) {pred_dist[i, 1:Nsim] = rlnorm(Nsim, 	log(lpred) - sigma^2/2, sigma)}
+	if(data_spatial$CTL==3) {pred_dist[i, 1:Nsim] = rgamma(Nsim, shape=1/CV^2, scale=lpred*CV^2)}
 
 	print(i)
 }
@@ -267,7 +325,7 @@ print(paste( round(100*sum(quantvec) / length(quantvec), 2), "% coverage within 
 #lake-year-specific mle predictions
 #circles = girls, squares = boys
 Age_Seq <- 0:26
-pdf("plots/lake_year_mles.pdf")
+pdf("plots/lake_year_mles_spatial.pdf")
 par(mfrow=c(3,3))
 
 for(i in unique(data$WBID)){
@@ -303,27 +361,61 @@ for(i in unique(data$WBID)){
 }}
 dev.off()
 
+#Now do it for the nonspatial model:
+Age_Seq <- 0:26
+SD = sdreport( obj_nonspatial )
+ParHat = as.list( opt_nonspatial$SD, "Estimate" )
+SEHat  = as.list( opt_nonspatial$SD, "Std. Error" )
+
+#declare parameters from fit
+t0       = ParHat$global_tzero
+global_linf = exp(ParHat$ln_global_linf)
+b_sex = exp(ParHat$ln_b_sex)
+b_j_omega = ParHat$b_j_omega
+eps_t0 = ParHat$eps_t0
+eps_omega = ParHat$eps_omega
+eps_linf = ParHat$eps_linf
+global_omega = exp(ParHat$ln_global_omega)
+CV = exp(ParHat$ln_cv)
+
+pdf("plots/lake_year_mles_nonspatial.pdf")
+par(mfrow=c(3,3))
+
+for(i in unique(data$WBID)){
+  sub.dat <- data[which(data$WBID==i),]
+  Lake <- unique(sub.dat$Lake)
+  Name <- unique(sub.dat$Name)
+  for(j in unique(sub.dat$Year)) {
+    sub.sub.dat <- sub.dat[which(sub.dat$Year==j),]
+    tzero = t0 +
+      eps_t0[Lake]
+
+    omega = global_omega +
+      b_j_omega[1]*sub.sub.dat$wallEffDen.Std[j] +
+      b_j_omega[2]*sub.sub.dat$compEffDen.Std[j] +
+      b_j_omega[3]*sub.sub.dat$GDD.Std[j] +
+      b_j_omega[4]*sub.sub.dat$wallEffDen.Std[j]*sub.sub.dat$compEffDen.Std[j] +
+      eps_omega[Lake]
+
+    linf = global_linf +
+      b_sex*sub.sub.dat$SexCode[j] +
+      eps_linf[Lake]
+
+    lpred_m <- lpred_f <- NA
+    for(a in 1:length(Age_Seq)){
+      lpred_m[a] = linf*(1-exp(-(omega/linf) * (Age_Seq[a] - t0 )))
+      lpred_f[a] = (b_sex + linf)*(1-exp(-(omega/(linf+b_sex)) * (Age_Seq[a] - t0 )))
+    }
+
+    plot(lpred_f~Age_Seq, type="l", col="black", ylim=c(0,85), main=paste(Name, j, sep= " " ),
+         xlab="Age (Years)", ylab="Total Length (cm)", cex.main=1, lwd=1.5)
+    points(lpred_m~Age_Seq, type="l", col="steelblue", lwd=1.5)
+    points(sub.sub.dat$TL~sub.sub.dat$Age, pch=sub.sub.dat$SexCode)
+  }}
+dev.off()
+
 #-------------------------------------------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------------------------------------------
-
-#General thoughts on the patterns in the lake-year-specific mle.pdf:
-#The model is fitting, but there are situations where TL-Age data in a given year/lake are
-#more or less linear.  This sometimes results in ugly patterns of under/over prediction, which makes sense
-#because the von B will be a garbage fit to a linear pattern. Also, given we are fitting 252 lake-year
-#combinations of von bertalanffys this is probably to be ocassionally expected.
-
-#This is also occuring because I am assuming each lake has a single Linfinity and t0--this was necessary to
-#maintain estimates in the realm of reality given data limitations.  So, the curvature/growth rate (omega)
-#and its spatial-temporal random effects can only compensate to a certain degree. I could put a spatial-temporal
-#field on linfinity as well, but would likely need an informative prior to keep it in the realm of reality.
-
-#I would be *very* careful trying to use this model to say something like "the growth curve for walleye in
-#lake x in year y is this--> sometimes this is fine, but other times this would catastrophically fail.
-
-#Nonetheless, it is reassuring that the general estimates of the betas are nearly identical to the spatial-only
-#version of this model.  The results between these spatial/spatial-temporal models are biolgically the same.I'm
-#not entirely convinced that this model is inappropriate for its original purpose, which was to
-#determine the effect of a few covariates on omega, but I may be over-valuing a model that I built...
 
 #-------------------------------------------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------------------------------------------
@@ -478,6 +570,7 @@ ggplot(d, aes(x, y, col = MSE)) + geom_point() +
 #Let's do some more residual checks:
 
 #Some ugly residual plots for what they are worth:
+rep <- obj_spatial$report()
 length_pred <- rep$length_pred
 data$E1 <- (data$TL - length_pred)
 
@@ -638,7 +731,7 @@ dev.off()
 #beta4 -- > Density interaction term
 #
 
-MLE <- Opt$SD$par.fixed
+MLE <- opt_spatial$SD$par.fixed
 SE  <- SEHat[which(names(SEHat)==names(MLE))]
 
 d <- as.data.frame(cbind(MLE, SE=unlist(SE)))
@@ -649,7 +742,7 @@ head(d)
 d$Parameter <- rownames(d)
 rownames(d) <- NULL
 
-d1 <- as.data.frame(cbind(MLE=Opt$SD$value, SE=Opt$SD$sd))
+d1 <- as.data.frame(cbind(MLE=opt_spatial$SD$value, SE=opt_spatial$SD$sd))
 d1$Parameter <- rownames(d1)
 rownames(d1) <- NULL
 d1$low <- d1$MLE - 1.96*d1$SE
@@ -680,8 +773,8 @@ d
 
 #Look at the covariance matrix:
 
-scaledCovar <- cov2cor(Opt$SD$cov.fixed) #scales the covariance matrix
-colnames(scaledCovar) <- rownames(scaledCovar) <- rownames(Opt$SD$cov.fixed)
+scaledCovar <- cov2cor(opt_spatial$SD$cov.fixed) #scales the covariance matrix
+colnames(scaledCovar) <- rownames(scaledCovar) <- rownames(opt_spatal$SD$cov.fixed)
 print(round(scaledCovar, 2))
 
 #ln_kappa and ln_tau_O are crazy correlated--probably expected

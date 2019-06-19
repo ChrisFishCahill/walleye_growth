@@ -52,7 +52,7 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(Nlakes);        //Number of lakes
 
   DATA_INTEGER( CTL );         //Control for likelihood
-  DATA_VECTOR( predTF_i );
+  DATA_VECTOR( predTF_i );     //indicator vector for fold
 
   //Parameters
   PARAMETER(ln_global_omega);
@@ -86,7 +86,6 @@ Type objective_function<Type>::operator() ()
   // Objective function
   Type jnll = 0;
   Type pred_jnll = 0;
-  Type Squared_ln_Errors = 0;
 
   vector<Type> jnll_i(Nobs);
   jnll_i.setZero();
@@ -129,22 +128,15 @@ Type objective_function<Type>::operator() ()
       //Gamma
       if( !isNA(length_i(i)) ) jnll_i(i) -= dgamma( length_i(i), 1/pow(exp(ln_cv),2), length_pred(i)*pow(exp(ln_cv),2), true ); ;
     }
-
     // Running counter
     if( predTF_i(i)==0 ) jnll += jnll_i(i); //estimation
-
-    if(predTF_i(i)==1){ //prediction
-      Squared_ln_Errors += pow((log(length_i(i) + 1.0) - log(length_pred(i) + 1.0)),2);
-      pred_jnll += jnll_i(i);
-    }
+    if( predTF_i(i)==1 ) pred_jnll += jnll_i(i); //prediction
   }
-
-  Type RMSLE = pow(Squared_ln_Errors / predTF_i.sum(), 0.5);
 
   // Reporting
   REPORT(length_pred);
   REPORT(pred_jnll);
-  REPORT(RMSLE);
+  REPORT(predTF_i);
 
   return jnll;
 }
