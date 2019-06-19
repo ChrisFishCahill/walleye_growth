@@ -495,37 +495,37 @@ d <- left_join(d,d1) %>%
 
 d$Nyears <- as.factor(d$Nyears)
 
-#Coverage balanced:
-sub.d <- d[which(d$Design=="Balanced" & d$Model=="Spatial"),]
-
-spatial_balanced <- sub.d %>%
-  dplyr::group_by(Design, Nyears) %>%
-  summarize(Coverage = sum(Covered) / length(Covered))
-
-sub.d <- d[which(d$Design=="Balanced" & d$Model=="Nonspatial"),]
-
-nonspatial_balanced <- sub.d %>%
-  dplyr::group_by(Design, Nyears) %>%
+d <- d %>%
+  dplyr::group_by(Design, Model, Parameter, Nyears) %>%
   summarize(Coverage = sum(na.exclude(Covered)) / (length(Covered)-sum(is.na(Covered))))
 
-spatial_balanced$Coverage
-nonspatial_balanced$Coverage
+#Balanced data
+p <- ggplot(subset(d, Design=="Balanced"), aes(x=Nyears, y=Coverage, fill=factor(Model))) +
+  geom_jitter(size=3, shape=21, colour="black", width=0.25) + scale_fill_manual(values = c(rgb(0,0,0,0.3), rgb(1,1,1,1))) +
+  xlab("Number of Years") + ylab("Coverage") +
+  facet_wrap(~Parameter, scales=c("fixed")) +
+  scale_x_discrete(limits=levels(d$Nyears)) + theme(legend.key=element_blank())
 
-#Coverage unbalanced:
-sub.d <- d[which(d$Design=="Unbalanced" & d$Model=="Spatial"),]
+p <- p + ggtitle(paste0(N_lakes," Lakes with Balanced Sampling Program"))+ theme(plot.title = element_text(hjust = 0.5))
+p <- p + geom_hline(aes(yintercept=0.95), linetype=3, size=1.35, colour="darkblue")
+p <- p + labs(fill = "")
+p
 
-spatial_unbalanced <- sub.d %>%
-  dplyr::group_by(Design, Nyears) %>%
-  summarize(Coverage = sum(Covered) / length(Covered))
+ggsave("Balanced_Coverage.png", p)
 
-sub.d <- d[which(d$Design=="Unbalanced" & d$Model=="Nonspatial"),]
+#Unbalanced data
+p <- ggplot(subset(d, Design=="Unbalanced"), aes(x=Nyears, y=Coverage, fill=factor(Model))) +
+  geom_jitter(size=3, shape=21, colour="black", width=0.25) + scale_fill_manual(values = c(rgb(0,0,0,0.3), rgb(1,1,1,1))) +
+  xlab("Number of Years") + ylab("Coverage") +
+  facet_wrap(~Parameter, scales=c("fixed")) +
+  scale_x_discrete(limits=levels(d$Nyears)) + theme(legend.key=element_blank())
 
-nonspatial_unbalanced <- sub.d %>%
-  dplyr::group_by(Design, Nyears) %>%
-  summarize(Coverage = sum(na.exclude(Covered)) / (length(Covered)-sum(is.na(Covered))))
+p <- p + ggtitle(paste0(N_lakes," Lakes with Unbalanced Sampling Program"))+ theme(plot.title = element_text(hjust = 0.5))
+p <- p + geom_hline(aes(yintercept=0.95), linetype=3, size=1.35, colour="darkblue")
+p <- p + labs(fill = "")
+p
 
-spatial_unbalanced$Coverage
-nonspatial_unbalanced$Coverage
+ggsave("Unbalanced_Coverage.png", p)
 
 #----------------------------------------
 #Quick and dirty conditional AIC comparison--not correct and should use REML to compare models
