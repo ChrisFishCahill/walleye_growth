@@ -27,7 +27,7 @@
 # if(CTL == 3 == Gamma)
 #
 #Cahill ^(;,;)^ March 2019
-#TODO fix lake situation
+#TODO
 #     unscrew the stupid lognormal/gamma/normal
 #     cross validation stuff once first two are complete.
 #     REML vs. ML
