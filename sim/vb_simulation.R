@@ -466,7 +466,6 @@ p2 <- ggpubr::ggarrange(p, p1, labels = c("Truth", "Estimated"))
 
 ggsave("RandomField.png", p2)
 
-
 #----------------------------------------
 #Coverage
 
