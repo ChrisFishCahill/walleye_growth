@@ -30,6 +30,7 @@
 #TODO
 #    Plots
 #-------------------------------------------------------------------------------------------------------------------
+start_time <- Sys.time()
 
 library(dplyr)
 library(plot3D)
@@ -52,8 +53,8 @@ data <- as.data.frame(data)
 #-------------------------------------------------------------------------------------------------------------------
 
 AICs <- data.frame(Model=c("Normal_Nonspatial", "Lognormal_Nonspatial", "Gamma_Nonspatial",
-                           "Normal_Spatial", "Lognormal_Spatial", "Gamma_Spatial"), AIC_REML=NA, AIC_ML=NA)
-
+                           "Normal_Spatial", "Lognormal_Spatial", "Gamma_Spatial"), AIC_REML=NA, AIC_ML=NA, h_block_cv=NA,
+                           lolo_cv=NA)
 
 #-------------------------------------------------------------------------------------------------------------------
 #Fit the nonspatial models REML:
@@ -209,23 +210,23 @@ plot(mesh)
 points(loc_xy, col="Steelblue", pch=1)
 # dev.off()
 
-# Other meshes to try:
+# Other meshes to try--much longer run time but same answers (Cahill pers. obs)
 
-RangeGuess <- 30    #~ 1/3 study area
-MaxEdge    <- RangeGuess/ 5 #as per https://haakonbakka.bitbucket.io/btopic104.html
-# #
-bound.outer <- diff(range(loc_xy[,1]))/3
-RangeGuess <- 50
-
-mesh2 = inla.mesh.2d(loc=loc_xy, max.edge = c(2,5)*RangeGuess )
-
-mesh3 = inla.mesh.2d(loc=loc_xy, max.edge = c(3,5)*RangeGuess )
-
-mesh4 = inla.mesh.2d(loc=loc_xy, max.edge = c(1,5)*RangeGuess )
-
-mesh5 = inla.mesh.2d(loc=loc_xy, max.edge = c(1,5)*RangeGuess,
-                     cutoff = MaxEdge,
-                     offset = c(MaxEdge, bound.outer))
+# RangeGuess <- 30    #~ 1/3 study area
+# MaxEdge    <- RangeGuess/ 5 #as per https://haakonbakka.bitbucket.io/btopic104.html
+# # #
+# bound.outer <- diff(range(loc_xy[,1]))/3
+# RangeGuess <- 50
+#
+# mesh2 = inla.mesh.2d(loc=loc_xy, max.edge = c(2,5)*RangeGuess )
+#
+# mesh3 = inla.mesh.2d(loc=loc_xy, max.edge = c(3,5)*RangeGuess )
+#
+# mesh4 = inla.mesh.2d(loc=loc_xy, max.edge = c(1,5)*RangeGuess )
+#
+# mesh5 = inla.mesh.2d(loc=loc_xy, max.edge = c(1,5)*RangeGuess,
+#                      cutoff = MaxEdge,
+#                      offset = c(MaxEdge, bound.outer))
 
 #mesh=mesh4
 
@@ -462,9 +463,6 @@ data <- dplyr::left_join(data, loc_xy, by=c("X_TTM_c", "Y_TTM_c"))
 h_cvs <- matrix(NA, ncol=length(unique(data$Block)), nrow=nrow(AICs))
 rownames(h_cvs) <- AICs$Model
 
-random_nonspatial = c("eps_linf", "eps_t0", "eps_omega")
-random_spatial = c("eps_omega_st", "eps_linf", "eps_t0")
-
 for(model in unique(AICs$Model)){
 for(k in unique(data$Block)){
   if(grepl("Norm", model)){CTL <- 1}
@@ -535,7 +533,7 @@ for(k in unique(data$Block)){
   print(paste0(model , k))
 }
 
-AICs$h_block_cvs <- rowMeans(h_cvs)
+AICs$h_block_cv <- rowMeans(h_cvs)
 saveRDS(h_cvs, file="C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/analysis/h_cvs")
 
 #--------------------------------------------------------------------------------------------------------------
@@ -614,9 +612,14 @@ for(model in unique(AICs$Model)){
   print(paste0(model , k))
 }
 
-AICs$lolo_cvs <- rowMeans(lolo_cvs)
+AICs$lolo_cv <- rowMeans(lolo_cvs)
 saveRDS(lolo_cvs, file="C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/analysis/lolo_cvs")
 saveRDS(AICs, file="C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/analysis/AICs")
+
+end_time <- Sys.time()
+
+time <- end_time - start_time
+time
 
 #------------------------------------------------------------------------------------------------------------
 #------------------------------------------------------------------------------------------------------------
