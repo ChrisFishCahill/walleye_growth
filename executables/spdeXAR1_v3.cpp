@@ -98,7 +98,6 @@ Type objective_function<Type>::operator() ()
   // Objective function
   Type jnll = 0;
   Type pred_jnll=0;
-  Type Squared_ln_Errors = 0;
 
   vector<Type> jnll_i(Nobs);
   jnll_i.setZero();
