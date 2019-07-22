@@ -357,26 +357,35 @@ p <- ggplot(subset(d, Design %in% "Balanced"), aes(x=Nyears, y=MLE, fill=Model))
      geom_boxplot(outlier.alpha=0.2) + scale_fill_manual(values = c(rgb(0,0,0,0.3), rgb(1,1,1,0.3))) +
      xlab("Number of Years") + ylab("Parameter Value") + guides(aes(shape=NA)) +
      labs(fill = "")  + facet_wrap(~Parameter, scales=c("free_y"), labeller=labeller(Parameter = labels)) +
-     scale_x_discrete(limits=levels(d$Nyears)) + theme(legend.key=element_blank())
+     scale_x_discrete(limits=levels(d$Nyears))
 
-p <- p + ggtitle(paste0(N_lakes," Lakes with Balanced Sampling Program"))+ theme(plot.title = element_text(hjust = 0.5))
+p <- p + ggtitle(paste0(N_lakes," Lakes with Balanced Sampling Program")) +
+  theme(plot.title = element_text(hjust = 0.5, size=14),
+        axis.title = element_text(size=14),
+        legend.key=element_blank())
+
 p <- p + geom_hline(aes(yintercept=Truth), linetype=3, size=1.35, colour="darkblue")
 p
 
-ggsave("50_Lakes_Balanced_boxplot.png", p, scale = 1, width=11, height=8, units=c("in"), dpi = 500 )
+# ggsave("50_Lakes_Balanced_boxplot.png", p, width=11, height=8,
+#        units=c("in"), dpi = 1200 )
 
 #Unbalanced data
 p <- ggplot(subset(d, Design %in% "Unbalanced"), aes(x=Nyears, y=MLE, fill=Model)) +
   geom_boxplot(outlier.alpha=0.2) + scale_fill_manual(values = c(rgb(0,0,0,0.3), rgb(1,1,1,0.3))) +
   xlab("Number of Years") + ylab("Parameter Value") + guides(aes(shape=NA)) +
   labs(fill = "")  + facet_wrap(~Parameter, scales=c("free_y"), labeller=labeller(Parameter = labels)) +
-  scale_x_discrete(limits=levels(d$Nyears)) + theme(legend.key=element_blank())
+  scale_x_discrete(limits=levels(d$Nyears))
 
-p <- p + ggtitle(paste0(N_lakes," Lakes with Unbalanced Sampling Program"))+ theme(plot.title = element_text(hjust = 0.5))
+p <- p + ggtitle(paste0(N_lakes," Lakes with Unbalanced Sampling Program")) +
+  theme(plot.title = element_text(hjust = 0.5, size=14),
+        axis.title = element_text(size=14),
+        legend.key=element_blank())
 p <- p + geom_hline(aes(yintercept=Truth), linetype=3, size=1.35, colour="darkblue")
 p
 
-ggsave("50_Lakes_Unbalanced_boxplot.png", p, scale = 1, width=11, height=8, units=c("in"), dpi = 500 )
+#ggsave("50_Lakes_Unbalanced_boxplot.png", p, width=11, height=8,
+ #         units=c("in"), dpi = 1200 )
 
 #-----------------------------
 #Plot the spatial model parameters only for balanced and unbalanced:
