@@ -1094,8 +1094,8 @@ print(paste( round(100*sum(quantvec) / length(quantvec), 2), "% coverage within 
 #lake-year-specific mle predictions
 #circles = girls, squares = boys
 Age_Seq <- 0:26
-pdf("C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/plots/LognormalLakeYearPredictions.pdf",
-    width=8, height=11)
+#pdf("C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/plots/LognormalLakeYearPredictions.pdf",
+ #   width=8, height=11)
 par(mfrow=c(3,3))
 for(i in unique(data$WBID)){
   sub.dat <- data[which(data$WBID==i),]
@@ -1132,7 +1132,7 @@ for(i in unique(data$WBID)){
     text(x=20, y=5, labels = paste0("T0 = ", format(round(t0,2), nsmall=2)))
 
 }}
-dev.off()
+#dev.off()
 
 #-------------------------------------------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------------------------------------------
