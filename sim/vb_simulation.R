@@ -68,7 +68,8 @@ Sim_Fn <- function( n_years=nyears, n_stations=nstations, SpatialScale=SpatialSc
   DF = NULL
   for(s in 1:n_stations){
     for(t in 1:n_years){
-      Ages  <- sample(Age_Range, Nfish, replace=T)
+      if(Design=="Selectivity"){weights = sel_at_age}else{weights=NULL}
+      Ages  <- sample(Age_Range, Nfish, replace=T, prob=weights)
       Linf  <-  Linfs[s] #Each lake gets a random deviate for Linf.
       T0    <- t0s[s]  #Each lake gets a random deviate for t0
       Omega <- Eta_it[s,t] #Predictors + Space-time for Omega
@@ -90,7 +91,7 @@ Sim_Fn <- function( n_years=nyears, n_stations=nstations, SpatialScale=SpatialSc
   DF = cbind( DF, 'Longitude'=Loc[DF[,'Lake'],1], 'Latitude'=Loc[DF[,'Lake'],2] )
   DF = data.frame(DF, row.names=NULL)
 
-  if(Design=="Unbalanced"){
+  if(Design=="Unbalanced" | Design=="Selctivity"){
    #Select lakes to keep
    lakes_to_keep <- sample(unique(DF$Lake), lakes_good_data*length(unique(DF$Lake)), replace=FALSE)
    DF_sentinel <- DF[which(DF$Lake %in% lakes_to_keep),]
@@ -136,8 +137,8 @@ N_lakes <- 50
 Likelihood=c("Normal", "Lognormal", "Gamma")
 Likelihood = Likelihood[2]
 
-Designs = c("Balanced", "Unbalanced")
-Designs = Designs[2]
+Designs = c("Balanced", "Unbalanced", "Selectivity")
+Designs = Designs[3]
 lakes_good_data <- 0.1 #percent of lakes with good data
 percent_of_data  <- 0.35 #percent of total dataset represented by lakes_good_data
 
@@ -157,6 +158,19 @@ Range        <- sqrt(8) / kappa
 SD_O         <- 4.66
 rho          <- 0.5
 
+#Relative selectivity curve for ages 0:25 calculated for Alta Walleye using model averaging (Cahill, unpublished)
+sel_at_age <- c(0.376, 0.597, 0.842, 0.925, 0.931, 0.913,
+                0.899, 0.897, 0.899, 0.899, 0.899, 0.899,
+                0.902, 0.902, 0.902, 0.902, 0.902, 0.902,
+                0.907, 0.907, 0.914, 0.927, 0.927, 0.948,
+                0.965, 0.91)
+
+# png( file="SelectivityCurve.png", width=6, height=4, res=600, units="in")
+# par( mar=c(3,3,2,0), mgp=c(2,0.5,0), tck=-0.02)
+# plot(0:25, sel_at_age, type="b", lwd=3, pch=16, col="black", bty="l",
+#      xlab="Age", ylab="Relative Selectivity")
+# dev.off()
+
 # Compile & load
 setwd("C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/sim/")
 VersionSpatial = "vb_spdeXar1"
@@ -167,7 +181,9 @@ dyn.load( dynlib(VersionSpatial) )
 dyn.load( dynlib(VersionNonSpatial) )
 
 seed <-  sample.int(1e6, 1)
-set.seed( seed ) #416009, 345614
+set.seed( seed )
+
+#Results in text were run in chunks: balanced seed = 416009, unbalanced = 345614, sel = 626693
 
 #Run the simulation:
 ptm <- proc.time()
@@ -194,7 +210,7 @@ for(design in Designs){
     # d <- reshape2::melt(Sim_List[["eps_st"]]) %>%
     #        dplyr::mutate(x = rep(Sim_List[["Loc"]][,"x"], nyears),
     #        y = rep(Sim_List[["Loc"]][,"y"], nyears))
-    #
+
     # ggplot(d, aes(x, y, col = value)) + geom_point() +
     #  facet_wrap(~L1) +
     #  scale_color_gradient2()
@@ -294,7 +310,7 @@ proc.time() - ptm
 
 #Loop through working directory and re-organize results into an array:
 Models <- c("Spatial", "Nonspatial")
-Designs <- c("Balanced", "Unbalanced")
+Designs <- c("Balanced", "Unbalanced", "Selectivity")
 
 sim_results <- array(NA, dim=c(length(Models), length(Designs), length(N_years), length(N_lakes), Nsim, 14, 3),
                      dimnames=list(c("Spatial","Nonspatial"), Designs, c(N_years),
@@ -387,6 +403,25 @@ p
 #ggsave("50_Lakes_Unbalanced_boxplot.png", p, width=11, height=8,
  #         units=c("in"), dpi = 1200 )
 
+
+#Unbalanced data
+p <- ggplot(subset(d, Design %in% "Selectivity"), aes(x=Nyears, y=MLE, fill=Model)) +
+  geom_boxplot(outlier.alpha=0.2) + scale_fill_manual(values = c(rgb(0,0,0,0.3), rgb(1,1,1,0.3))) +
+  xlab("Number of Years") + ylab("Parameter Value") + guides(aes(shape=NA)) +
+  labs(fill = "")  + facet_wrap(~Parameter, scales=c("free_y"), labeller=labeller(Parameter = labels)) +
+  scale_x_discrete(limits=levels(d$Nyears))
+
+p <- p + ggtitle(paste0(N_lakes," Lakes with Unbalanced + Selectivity Sampling Program")) +
+  theme(plot.title = element_text(hjust = 0.5, size=14),
+        axis.title = element_text(size=14),
+        legend.key=element_blank())
+p <- p + geom_hline(aes(yintercept=Truth), linetype=3, size=1.35, colour="darkblue")
+p
+
+#ggsave("50_Lakes_Selectivity_boxplot.png", p, width=11, height=8,
+#         units=c("in"), dpi = 1200 )
+
+
 #-----------------------------
 #Plot the spatial model parameters only for balanced and unbalanced:
 d <- reshape2::melt(sim_results[c("Spatial", "Nonspatial"),Designs,as.character(N_years),
@@ -424,6 +459,21 @@ ggsave("50_Lakes_Balanced_violin_st.png", p, scale = 1, width=11, height=8, unit
 
 #Unbalanced data
 p <- ggplot(subset(d, Design %in% "Unbalanced" & Model %in% "Spatial"), aes(x=Nyears, y=MLE)) +
+  geom_violin(fill=rgb(0,0,0,0.3)) +
+  xlab("Number of Years") + ylab("Parameter Value") + guides(aes(shape=NA)) +
+  labs(fill = "") + facet_wrap(~Parameter, scales=c("free_y"), labeller=labeller(Parameter = labels)) +
+  scale_x_discrete(limits=levels(d$Nyears)) + theme(legend.key=element_blank())
+
+p <- p + ggtitle(paste0(N_lakes," Lakes with Unbalanced Sampling Program"))+ theme(plot.title = element_text(hjust = 0.5))
+p <- p + geom_hline(aes(yintercept=Truth), linetype=3, size=1.35, colour="darkblue")
+p <- p + geom_jitter(width=0.06)
+p
+
+ggsave("50_Lakes_Unbalanced_violin_st.png", p, scale = 1, width=11, height=8, units=c("in"), dpi = 600 )
+
+
+#Selectivity data
+p <- ggplot(subset(d, Design %in% "Selectivity" & Model %in% "Spatial"), aes(x=Nyears, y=MLE)) +
   geom_violin(fill=rgb(0,0,0,0.3)) +
   xlab("Number of Years") + ylab("Parameter Value") + guides(aes(shape=NA)) +
   labs(fill = "") + facet_wrap(~Parameter, scales=c("free_y"), labeller=labeller(Parameter = labels)) +
@@ -529,6 +579,20 @@ p <- ggplot(subset(d, Design=="Unbalanced"), aes(x=Nyears, y=Coverage, fill=fact
   scale_x_discrete(limits=levels(d$Nyears)) + theme(legend.key=element_blank())
 
 p <- p + ggtitle(paste0(N_lakes," Lakes with Unbalanced Sampling Program"))+ theme(plot.title = element_text(hjust = 0.5))
+p <- p + geom_hline(aes(yintercept=0.95), linetype=3, size=1.35, colour="darkblue")
+p <- p + labs(fill = "")
+p
+
+ggsave("Unbalanced_Coverage.png", p)
+
+#Selectivity data
+p <- ggplot(subset(d, Design=="Selectivity"), aes(x=Nyears, y=Coverage, fill=factor(Model))) +
+  geom_jitter(size=3, shape=21, colour="black", width=0.25) + scale_fill_manual(values = c(rgb(0,0,0,0.3), rgb(1,1,1,1))) +
+  xlab("Number of Years") + ylab("Coverage") +
+  facet_wrap(~Parameter, scales=c("fixed")) +
+  scale_x_discrete(limits=levels(d$Nyears)) + theme(legend.key=element_blank())
+
+p <- p + ggtitle(paste0(N_lakes," Lakes with Unbalanced + Selectivity Sampling Program"))+ theme(plot.title = element_text(hjust = 0.5))
 p <- p + geom_hline(aes(yintercept=0.95), linetype=3, size=1.35, colour="darkblue")
 p <- p + labs(fill = "")
 p
