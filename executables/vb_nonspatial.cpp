@@ -126,7 +126,7 @@ Type objective_function<Type>::operator() ()
     }
     if(CTL == 3){
       //Gamma
-      if( !isNA(length_i(i)) ) jnll_i(i) -= dgamma( length_i(i), 1/pow(exp(ln_cv),2), length_pred(i)*pow(exp(ln_cv),2), true ); ;
+      if( !isNA(length_i(i)) ) jnll_i(i) -= dgamma( length_i(i), 1/pow(exp(ln_cv),2), length_pred(i)*pow(exp(ln_cv),2), true ); 
     }
     // Running counter
     if( predTF_i(i)==0 ) jnll += jnll_i(i); //estimation
