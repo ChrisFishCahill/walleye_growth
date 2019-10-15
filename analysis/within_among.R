@@ -9,7 +9,7 @@ library(TMB)
 library(INLA)
 library(ggplot2)
 
-data <- readRDS("C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/analysis/vB_analysis_august_2019_cahill.rds")
+data <- readRDS("analysis/vB_analysis_august_2019_cahill.rds")
 data <- as.data.frame(data)
 
 #Set up the mean density for each lake for among lake effect:
@@ -34,7 +34,7 @@ ggplot(data, aes(y=lake_centered_dens.std, x=WBID)) + geom_point()
 #Nonspatial model
 #--------------
 
-setwd("C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/executables")
+setwd("executables")
 VersionNonSpatial = "vb_nonspatial"
 compile(paste0(VersionNonSpatial, ".cpp"))
 dyn.load( dynlib(VersionNonSpatial) )
@@ -62,28 +62,68 @@ parameters_nonspatial = list("ln_global_omega" = log(14),
                              "ln_cv" = log(0.2), "ln_sd_omega" = log(4.5),
                              "ln_sd_slope"=0)
 
+tmb_map <- list(
+  eps_omega =    as.factor(rep(NA, length(parameters_nonspatial$eps_omega))),
+  eps_linf =     as.factor(rep(NA, length(parameters_nonspatial$eps_linf))),
+  eps_t0 =       as.factor(rep(NA, length(parameters_nonspatial$eps_t0))),
+  eps_slope =    as.factor(rep(NA, length(parameters_nonspatial$eps_slope))),
+  ln_sd_linf =   as.factor(rep(NA, length(parameters_nonspatial$ln_sd_linf))),
+  ln_sd_tzero =  as.factor(rep(NA, length(parameters_nonspatial$ln_sd_tzero))),
+  ln_sd_slope =  as.factor(rep(NA, length(parameters_nonspatial$ln_sd_slope))),
+  ln_sd_omega =     as.factor(rep(NA, length(parameters_nonspatial$ln_sd_omega)))
+)
+
 
 obj_nonspatial <- MakeADFun(data=data_nonspatial, parameters=parameters_nonspatial,
-                            random=random_nonspatial, hessian=FALSE, DLL=VersionNonSpatial)
+                            # random=random_nonspatial,
+  map = tmb_map,
+  hessian=FALSE, DLL=VersionNonSpatial)
 
-opt_nonspatial = TMBhelper::Optimize(obj=obj_nonspatial,
-                                     control=list(eval.max=1000, iter.max=1000),
-                                     getsd=T, newtonsteps=1, bias.correct=F)
+tmb_opt <- nlminb(
+  start = obj_nonspatial$par, objective = obj_nonspatial$fn, gradient = obj_nonspatial$gr,
+  control = list(eval.max = 1000, iter.max = 1000)
+)
 
-SD = sdreport( obj_nonspatial )
-final_gradient = obj_nonspatial$gr( opt_nonspatial$par )
-if( any(abs(final_gradient)>0.0001) | SD$pdHess==FALSE ) stop("Not converged")
+# Initialize the fixed effects from the first stage:
+set_par_value <- function(opt, par) {
+  as.numeric(opt$par[par == names(opt$par)])
+}
+parameters_nonspatial$ln_global_omega <- set_par_value(tmb_opt, "ln_global_omega")
+parameters_nonspatial$ln_global_linf <- set_par_value(tmb_opt, "ln_global_linf")
+parameters_nonspatial$global_tzero <- set_par_value(tmb_opt, "global_tzero")
+parameters_nonspatial$ln_b_sex   <- set_par_value(tmb_opt, "ln_b_sex")
+parameters_nonspatial$b_j_omega <- set_par_value(tmb_opt, "b_j_omega")
+parameters_nonspatial$mu_slope <- set_par_value(tmb_opt, "mu_slope")
+parameters_nonspatial$ln_cv  <- set_par_value(tmb_opt, "ln_cv")
 
-ParHat_nonspatial = as.list( opt_nonspatial$SD, "Estimate" )
-SEHat_nonspatial  = as.list( opt_nonspatial$SD, "Std. Error" )
 
-cbind("slope"=(ParHat_nonspatial$eps_slope + ParHat_nonspatial$mu_slope),"se"=SEHat_nonspatial$eps_slope)
+obj_nonspatial <- MakeADFun(data=data_nonspatial, parameters=parameters_nonspatial,
+  random=random_nonspatial,
+  hessian=FALSE, DLL=VersionNonSpatial)
 
-ParHat_nonspatial$mu_slope
-SEHat_nonspatial$mu_slope
+tmb_opt <- nlminb(
+  start = obj_nonspatial$par, objective = obj_nonspatial$fn, gradient = obj_nonspatial$gr,
+  control = list(eval.max = 1000, iter.max = 1000)
+)
 
-ParHat_nonspatial$b_j_omega #first value is among-lake coefficient
-SEHat_nonspatial$b_j_omega
+# opt_nonspatial = TMBhelper::Optimize(obj=obj_nonspatial,
+#                                      control=list(eval.max=1000, iter.max=1000),
+#                                      getsd=T, newtonsteps=1, bias.correct=F)
+#
+# SD = sdreport( obj_nonspatial )
+# final_gradient = obj_nonspatial$gr( opt_nonspatial$par )
+# if( any(abs(final_gradient)>0.0001) | SD$pdHess==FALSE ) stop("Not converged")
+#
+# ParHat_nonspatial = as.list( opt_nonspatial$SD, "Estimate" )
+# SEHat_nonspatial  = as.list( opt_nonspatial$SD, "Std. Error" )
+#
+# cbind("slope"=(ParHat_nonspatial$eps_slope + ParHat_nonspatial$mu_slope),"se"=SEHat_nonspatial$eps_slope)
+#
+# ParHat_nonspatial$mu_slope
+# SEHat_nonspatial$mu_slope
+#
+# ParHat_nonspatial$b_j_omega #first value is among-lake coefficient
+# SEHat_nonspatial$b_j_omega
 
 
 #----------
@@ -95,7 +135,6 @@ loc_xy <- loc_xy/1000 #Put distance in kms
 
 #mesh = inla.mesh.2d(loc=loc_xy, max.edge=c(62,1000))
 mesh = inla.mesh.create( loc_xy, refine=TRUE, extend=-0.5, cutoff=0.01 )
-
 mesh$n
 
 #Create the inputs for spatial model
@@ -133,18 +172,40 @@ parameters_spatial = list("ln_global_omega" = log(13.28954),
                           "ln_cv" = -2.5043055,
                           "ln_kappa" = -2.7,
                           "ln_tau_O" = 0,
-                          "rho" = 0.9 )
+                          "rho" = 3) # 2 * plogis(3) - 1 = 0.9
 
 random_spatial = c("eps_omega_st", "eps_linf", "eps_t0", "eps_slope")
 
+tmb_map <- list(
+  eps_omega_st = as.factor(rep(NA, length(parameters_spatial$eps_omega_st))),
+  eps_linf =     as.factor(rep(NA, length(parameters_spatial$eps_linf))),
+  eps_t0 =       as.factor(rep(NA, length(parameters_spatial$eps_t0))),
+  eps_slope =    as.factor(rep(NA, length(parameters_spatial$eps_slope))),
+  ln_sd_linf =   as.factor(rep(NA, length(parameters_spatial$ln_sd_linf))),
+  ln_sd_tzero =  as.factor(rep(NA, length(parameters_spatial$ln_sd_tzero))),
+  ln_sd_slope =  as.factor(rep(NA, length(parameters_spatial$ln_sd_slope))),
+  ln_tau_O =     as.factor(rep(NA, length(parameters_spatial$ln_tau_O))),
+  rho =          as.factor(rep(NA, length(parameters_spatial$rho)))
+)
+
 obj_spatial = MakeADFun(data=data_spatial, parameters=parameters_spatial,
-                        random=random_spatial, hessian=FALSE, DLL=VersionSpatial)
+                        # random=random_spatial,
+                        hessian=FALSE, DLL=VersionSpatial,
+                        map=tmb_map)
+
+
+tmb_opt <- nlminb(
+  start = obj_spatial$par, objective = obj_spatial$fn, gradient = obj_spatial$gr,
+  control = list(eval.max = 1000, iter.max = 1000)
+)
+
+# -------------------------
 
 #about ten minutes to run on my machine:
 opt_spatial  = TMBhelper::Optimize(obj=obj_spatial,
                                    control=list(eval.max=1000, iter.max=1000),
-                                   getsd=T, newtonsteps=1, bias.correct=T,
-                                   lower=c(rep(-Inf,12),-0.999), upper=c(rep(Inf,12),0.999))
+                                   getsd=T, newtonsteps=1, bias.correct=T)
+                                   # lower=c(rep(-Inf,12),-0.999), upper=c(rep(Inf,12),0.999))
 
 SD = sdreport( obj_spatial )
 final_gradient = obj_spatial$gr( opt_spatial$par )

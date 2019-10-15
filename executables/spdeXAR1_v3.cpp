@@ -30,6 +30,12 @@ bool isNA(Type x){
   return R_IsNA(asDouble(x));
 }
 
+template <class Type>
+Type minus_one_to_one(Type x)
+{
+  return Type(2) * invlogit(x) - Type(1);
+}
+
 template<class Type>
 Type dlnorm(Type x, Type meanlog, Type sdlog, int give_log=0){
   Type logres;
@@ -116,7 +122,7 @@ Type objective_function<Type>::operator() ()
 
   // Probability of spatial-temporal random coefficients
   SparseMatrix<Type> Q = R_inla::Q_spde(spdeMatrices, exp(ln_kappa));
-  jnll += SCALE(SEPARABLE(AR1(rho), GMRF(Q)), 1.0 / exp(ln_tau_O))(eps_omega_st);
+  jnll += SCALE(SEPARABLE(AR1(minus_one_to_one(rho)), GMRF(Q)), 1.0 / exp(ln_tau_O))(eps_omega_st);
 
   vector<Type> eps_i (Nobs);
   for(int i=0; i<Nobs; i++){
