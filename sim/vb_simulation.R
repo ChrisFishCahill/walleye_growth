@@ -165,7 +165,7 @@ sel_at_age <- c(0.376, 0.597, 0.842, 0.925, 0.931, 0.913,
                 0.907, 0.907, 0.914, 0.927, 0.927, 0.948,
                 0.965, 0.91)
 
-# png( file="SelectivityCurve.png", width=6, height=4, res=600, units="in")
+# png( file="C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/sim/plots/SelectivityCurve.png", width=6, height=4, res=600, units="in")
 # par( mar=c(3,3,2,0), mgp=c(2,0.5,0), tck=-0.02)
 # plot(0:25, sel_at_age, type="b", lwd=3, pch=16, col="black", bty="l",
 #      xlab="Age", ylab="Relative Selectivity")
@@ -210,7 +210,7 @@ for(design in Designs){
     # d <- reshape2::melt(Sim_List[["eps_st"]]) %>%
     #        dplyr::mutate(x = rep(Sim_List[["Loc"]][,"x"], nyears),
     #        y = rep(Sim_List[["Loc"]][,"y"], nyears))
-
+    #
     # ggplot(d, aes(x, y, col = value)) + geom_point() +
     #  facet_wrap(~L1) +
     #  scale_color_gradient2()
@@ -298,7 +298,7 @@ for(design in Designs){
         print(paste(paste("Simulation", file_name, sep=" "), "Complete", sep=" "))
         replicate <- replicate + 1
 
-        #remove object if replicate fishies:
+        #remove object if replicate finishies:
         if (file.exists("checker.RDA")) file.remove("checker.RDA")
       } #try
     } #while
@@ -308,7 +308,10 @@ for(design in Designs){
 
 proc.time() - ptm
 
-#Loop through working directory and re-organize results into an array:
+#---------------------------------------------------------------------
+#Loop through working directory and re-organize
+#results into an array for plotting
+#---------------------------------------------------------------------
 Models <- c("Spatial", "Nonspatial")
 Designs <- c("Balanced", "Unbalanced", "Selectivity")
 
@@ -363,16 +366,22 @@ d <- reshape2::melt(sim_results[c("Nonspatial", "Spatial"),Designs,as.character(
               mutate(Parameter=stringr::str_remove(Parameter, "ln_"))
 d$Nyears <- as.factor(d$Nyears)
 
-labels <- c(global_omega = "Global Omega", cv = "Coefficient of Variation",
-            global_linf= "Global Linf", b_j_omega1="Beta 1", b_j_omega2="Beta 2",
-            b_j_omega3="Beta 3", sd_linf="Linf StDev", global_tzero="Global T0",
-            sd_tzero="T0 StDev")
+d <- d %>% mutate(Parameter2 = case_when(
+  Parameter == "global_omega" ~ "omega",
+  Parameter == "global_linf" ~ "L[infinity]",
+  Parameter == "sd_linf" ~  "sigma[l[infinity]]",
+  Parameter == "global_tzero" ~ "t[0]",
+  Parameter == "sd_tzero" ~ "sigma[t[0]]",
+  Parameter == "cv" ~ "cv",
+  Parameter == "b_j_omega1" ~ "beta[1]",
+  Parameter == "b_j_omega2" ~ "beta[2]",
+  Parameter == "b_j_omega3" ~ "beta[3]"))
 
 #Balanced data
 p <- ggplot(subset(d, Design %in% "Balanced"), aes(x=Nyears, y=MLE, fill=Model)) +
      geom_boxplot(outlier.alpha=0.2) + scale_fill_manual(values = c( rgb(1,1,1,0.3), rgb(0,0,0,0.3))) +
      xlab("Number of Years") + ylab("Parameter Value") + guides(aes(shape=NA)) +
-     labs(fill = "")  + facet_wrap(~Parameter, scales=c("free_y"), labeller=labeller(Parameter = labels)) +
+     labs(fill = "")  + facet_wrap(~Parameter2, scales=c("free_y"), labeller = label_parsed) +  #labeller(Parameter = labels)) +
      scale_x_discrete(limits=levels(d$Nyears))
 
 p <- p + ggtitle("Scenario 1: Balanced Sampling") + theme_bw() +
@@ -380,19 +389,20 @@ p <- p + ggtitle("Scenario 1: Balanced Sampling") + theme_bw() +
         axis.title = element_text(size=14),
         legend.key=element_blank(),
         panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank())
+        panel.grid.minor = element_blank(),
+        strip.text.x = element_text(size = 15, colour = "black") )
 
-p <- p + geom_hline(aes(yintercept=Truth), linetype=3, size=1.35, colour="darkblue")
+p <- p + geom_hline(aes(yintercept=Truth), linetype="longdash", size=1.0, colour="steelblue")
 p
 # ggsave("C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/sim/plots/50_Lakes_Balanced_boxplot.png",
-#         p, width=11, height=8,
-#         units=c("in"), dpi = 1200 )
+#          p, width=11, height=8,
+#          units=c("in"), dpi = 1200 )
 
 #Unbalanced data
 p <- ggplot(subset(d, Design %in% "Unbalanced"), aes(x=Nyears, y=MLE, fill=Model)) +
   geom_boxplot(outlier.alpha=0.2) + scale_fill_manual(values = c( rgb(1,1,1,0.3), rgb(0,0,0,0.3))) +
   xlab("Number of Years") + ylab("Parameter Value") + guides(aes(shape=NA)) +
-  labs(fill = "")  + facet_wrap(~Parameter, scales=c("free_y"), labeller=labeller(Parameter = labels)) +
+  labs(fill = "")  + facet_wrap(~Parameter2, scales=c("free_y"), labeller = label_parsed) +  #labeller(Parameter = labels)) +
   scale_x_discrete(limits=levels(d$Nyears))
 
 p <- p + ggtitle("Scenario 2: Unbalanced Sampling") + theme_bw() +
@@ -400,10 +410,12 @@ p <- p + ggtitle("Scenario 2: Unbalanced Sampling") + theme_bw() +
         axis.title = element_text(size=14),
         legend.key=element_blank(),
         panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank())
+        panel.grid.minor = element_blank(),
+        strip.text.x = element_text(size = 15, colour = "black") )
 
-p <- p + geom_hline(aes(yintercept=Truth), linetype=3, size=1.35, colour="darkblue")
+p <- p + geom_hline(aes(yintercept=Truth), linetype="longdash", size=1.0, colour="steelblue")
 p
+
 # ggsave("C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/sim/plots/50_Lakes_Unbalanced_boxplot.png",
 #        p, width=11, height=8,
 #        units=c("in"), dpi = 1200 )
@@ -412,7 +424,7 @@ p
 p <- ggplot(subset(d, Design %in% "Selectivity"), aes(x=Nyears, y=MLE, fill=Model)) +
   geom_boxplot(outlier.alpha=0.2) + scale_fill_manual(values = c( rgb(1,1,1,0.3), rgb(0,0,0,0.3))) +
   xlab("Number of Years") + ylab("Parameter Value") + guides(aes(shape=NA)) +
-  labs(fill = "")  + facet_wrap(~Parameter, scales=c("free_y"), labeller=labeller(Parameter = labels)) +
+  labs(fill = "")  + facet_wrap(~Parameter2, scales=c("free_y"), labeller = label_parsed) +  #labeller(Parameter = labels)) +
   scale_x_discrete(limits=levels(d$Nyears))
 
 p <- p + ggtitle("Scenario 3: Unbalanced Sampling & Selectivity") + theme_bw() +
@@ -420,14 +432,14 @@ p <- p + ggtitle("Scenario 3: Unbalanced Sampling & Selectivity") + theme_bw() +
         axis.title = element_text(size=14),
         legend.key=element_blank(),
         panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank())
+        panel.grid.minor = element_blank(),
+        strip.text.x = element_text(size = 15, colour = "black") )
 
-p <- p + geom_hline(aes(yintercept=Truth), linetype=3, size=1.35, colour="darkblue")
+p <- p + geom_hline(aes(yintercept=Truth), linetype="longdash", size=1.0, colour="steelblue")
 p
 # ggsave("C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/sim/plots/50_Lakes_Selectivity_boxplot.png",
 #        p, width=11, height=8,
 #        units=c("in"), dpi = 1200 )
-
 
 #-----------------------------
 #Does the model recover the spatial-temporal field?
@@ -465,8 +477,9 @@ p1 <- group_by(d, year) %>%
 p1
 
 p2 <- ggpubr::ggarrange(p, p1, labels = c("Truth", "Estimated"))
+p2
 
-ggsave("RandomField.png", p2)
+# ggsave("RandomField.png", p2)
 
 #----------------------------------------
 #Coverage
@@ -500,53 +513,62 @@ d <- d %>%
   dplyr::group_by(Design, Model, Parameter, Nyears) %>%
   summarize(Coverage = sum(na.exclude(Covered)) / (length(Covered)-sum(is.na(Covered))))
 
-labels <- c(b_j_omega1="Beta 1", b_j_omega2="Beta 2",
-            b_j_omega3="Beta 3", cv = "Coefficient of Variation",
-            global_linf= "Global Linf", global_omega = "Global Omega",
-            global_tzero="Global T0", kappa = "Matérn Kappa",
-            rho="Rho", sd_linf="Linf StDev", sd_tzero="T0 StDev",
-            sigmaO="Spatial Noise")
+d <- d %>% mutate(Parameter2 = case_when(
+  Parameter == "global_omega" ~ "omega",
+  Parameter == "global_linf" ~ "L[infinity]",
+  Parameter == "sd_linf" ~  "sigma[l[infinity]]",
+  Parameter == "global_tzero" ~ "t[0]",
+  Parameter == "sd_tzero" ~ "sigma[t[0]]",
+  Parameter == "cv" ~ "cv",
+  Parameter == "b_j_omega1" ~ "beta[1]",
+  Parameter == "b_j_omega2" ~ "beta[2]",
+  Parameter == "b_j_omega3" ~ "beta[3]",
+  Parameter == "kappa" ~ as.character(parse(text= paste("Matérn  ~", "kappa" ) )),
+  Parameter == "rho" ~ "rho",
+  Parameter == "sigmaO" ~ "sigma[O]")
+  )
 
 #Balanced data
 p <- ggplot(subset(d, Design=="Balanced"), aes(x=Nyears, y=Coverage, fill=factor(Model))) +
   geom_jitter(size=3, shape=21, colour="black", width=0.25) + scale_fill_manual(values = c(rgb(1,1,1,1),rgb(0,0,0,0.3))) +
   xlab("Number of Years") + ylab("Coverage") +
-  facet_wrap(~Parameter, scales=c("fixed"), labeller=labeller(Parameter = labels)) +
+  facet_wrap(~Parameter2, scales=c("fixed"), labeller = label_parsed) +
   scale_x_discrete(limits=levels(d$Nyears))
 
 p <- p + ggtitle("Scenario 1: Balanced Sampling Coverage") + theme_bw() +
-  theme(legend.key=element_blank(),
-        plot.title = element_text(hjust = 0.5, size=14),
+  theme(plot.title = element_text(hjust = 0.5, size=14),
         axis.title = element_text(size=14),
+        legend.key=element_blank(),
         panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank())
+        panel.grid.minor = element_blank(),
+        strip.text.x = element_text(size = 15, colour = "black") )
 
-p <- p + geom_hline(aes(yintercept=0.95), linetype=3, size=1.35, colour="darkblue")
+p <- p + geom_hline(aes(yintercept=0.95), linetype="longdash", size=1.0, colour="steelblue")
 p <- p + labs(fill = "")
 p
 
-ggsave("C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/sim/plots/Balanced_Coverage.png",
-        p, width=11, height=8,
-        units=c("in"), dpi = 1200 )
+# ggsave("C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/sim/plots/Balanced_Coverage.png",
+#         p, width=11, height=8,
+#         units=c("in"), dpi = 1200 )
 
 #Unbalanced data
 p <- ggplot(subset(d, Design=="Unbalanced"), aes(x=Nyears, y=Coverage, fill=factor(Model))) +
   geom_jitter(size=3, shape=21, colour="black", width=0.25) + scale_fill_manual(values = c(rgb(1,1,1,1),rgb(0,0,0,0.3))) +
   xlab("Number of Years") + ylab("Coverage") +
-  facet_wrap(~Parameter, scales=c("fixed"), labeller=labeller(Parameter = labels)) +
+  facet_wrap(~Parameter2, scales=c("fixed"), labeller = label_parsed) +
   scale_x_discrete(limits=levels(d$Nyears))
 
 p <- p + ggtitle("Scenario 2: Unbalanced Sampling Coverage") + theme_bw() +
-  theme(legend.key=element_blank(),
-        plot.title = element_text(hjust = 0.5, size=14),
+  theme(plot.title = element_text(hjust = 0.5, size=14),
         axis.title = element_text(size=14),
+        legend.key=element_blank(),
         panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank())
+        panel.grid.minor = element_blank(),
+        strip.text.x = element_text(size = 15, colour = "black") )
 
-p <- p + geom_hline(aes(yintercept=0.95), linetype=3, size=1.35, colour="darkblue")
+p <- p + geom_hline(aes(yintercept=0.95), linetype="longdash", size=1.0, colour="steelblue")
 p <- p + labs(fill = "")
 p
-
 # ggsave("C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/sim/plots/Unbalanced_Coverage.png",
 #        p, width=11, height=8,
 #        units=c("in"), dpi = 1200 )
@@ -555,17 +577,18 @@ p
 p <- ggplot(subset(d, Design=="Selectivity"), aes(x=Nyears, y=Coverage, fill=factor(Model))) +
   geom_jitter(size=3, shape=21, colour="black", width=0.25) + scale_fill_manual(values = c(rgb(1,1,1,1),rgb(0,0,0,0.3))) +
   xlab("Number of Years") + ylab("Coverage") +
-  facet_wrap(~Parameter, scales=c("fixed"), labeller=labeller(Parameter = labels)) +
+  facet_wrap(~Parameter2, scales=c("fixed"), labeller = label_parsed) +
   scale_x_discrete(limits=levels(d$Nyears))
 
-p <- p + ggtitle("Scenario 3: Unbalanced Sampling & Selectivity Coverage") + theme_bw() +
-  theme(legend.key=element_blank(),
-        plot.title = element_text(hjust = 0.5, size=14),
+p <- p + ggtitle("Scenario 1: Unbalanced Sampling & Selectivity Coverage") + theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5, size=14),
         axis.title = element_text(size=14),
+        legend.key=element_blank(),
         panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank())
+        panel.grid.minor = element_blank(),
+        strip.text.x = element_text(size = 15, colour = "black") )
 
-p <- p + geom_hline(aes(yintercept=0.95), linetype=3, size=1.35, colour="darkblue")
+p <- p + geom_hline(aes(yintercept=0.95), linetype="longdash", size=1.0, colour="steelblue")
 p <- p + labs(fill = "")
 p
 
