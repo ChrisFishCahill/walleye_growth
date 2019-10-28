@@ -107,7 +107,6 @@ Type objective_function<Type>::operator() ()
 
     linf  = exp(ln_global_linf) +             //intercept
       exp(ln_b_sex)*sex_i(i) +                //sex effect
-      eta_fixed_i(i) +
       eps_linf(lake_i(i));                    //std ran eff
 
     t0    = global_tzero +                    //intercpet
