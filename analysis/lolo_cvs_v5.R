@@ -131,7 +131,7 @@ names(loc_xy) <- c("X_TTM_c", "Y_TTM_c")
 
 
 #Leave one lake out cross validation:
-lolo_cvs <- matrix(NA, ncol=length(unique(data$Lake)), nrow=nrow(AICs))
+lolo_cvs <- matrix(NA, ncol=length(unique(data$Lake)), nrow=nrow(CVs))
 rownames(lolo_cvs) <- CVs$Model
 
 for(model in unique(CVs$Model)){
