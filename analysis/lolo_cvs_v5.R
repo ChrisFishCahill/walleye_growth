@@ -141,7 +141,7 @@ for(model in unique(CVs$Model)){
     if(grepl("Gamma", model)){CTL <- 3}
 
     Partition_i = ifelse(data$Lake==k,1,0)
-
+    if(grepl("Nonspatial", model)){
     if(!grepl("Reduced", model)){
       data_nonspatial = list("Nobs" = nrow(data), "length_i" = data$TL, "age_i" = data$Age,
                              "lake_i" = data$Lake - 1,
@@ -171,6 +171,7 @@ for(model in unique(CVs$Model)){
                                            getsd=T, newtonsteps=1, bias.correct=F)
 
       rep <- obj_nonspatial$report()
+  }
 
   if(grepl("Spatial", model)){
     if(!grepl("Reduced", model)){
