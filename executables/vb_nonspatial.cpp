@@ -48,7 +48,6 @@ Type objective_function<Type>::operator() ()
   DATA_VECTOR(age_i);          //age of fish i
   DATA_IVECTOR(lake_i);        //grouping factor for lake
   DATA_MATRIX(X_ij_omega);     //covariate matrix for omega
-  DATA_VECTOR(within_lake_i);  //within lake density effect
   DATA_VECTOR(sex_i);          //sex of fish i
   DATA_INTEGER(Nlakes);        //Number of lakes
 
@@ -57,6 +56,7 @@ Type objective_function<Type>::operator() ()
 
   //Parameters
   PARAMETER(ln_global_omega);
+  PARAMETER(ln_sd_omega);
 
   PARAMETER(ln_global_linf);
   PARAMETER(ln_sd_linf);
@@ -66,19 +66,14 @@ Type objective_function<Type>::operator() ()
   PARAMETER(ln_b_sex);
 
   PARAMETER_VECTOR(b_j_omega);
-  PARAMETER(mu_slope);
 
   //Random coefficients
   PARAMETER_VECTOR(eps_omega);
   PARAMETER_VECTOR(eps_linf);
   PARAMETER_VECTOR(eps_t0);
-  PARAMETER_VECTOR(eps_slope);
 
   //Likelihood noise term
   PARAMETER(ln_cv);
-
-  PARAMETER(ln_sd_omega);
-  PARAMETER(ln_sd_slope);
 
   //calculate the fixed effects:
   vector<Type> eta_fixed_i = X_ij_omega * b_j_omega;
@@ -99,7 +94,6 @@ Type objective_function<Type>::operator() ()
     jnll -= dnorm(eps_linf(l), Type(0.0), exp(ln_sd_linf), true);
     jnll -= dnorm(eps_t0(l), Type(0.0), exp(ln_sd_tzero), true);
     jnll -= dnorm(eps_omega(l), Type(0.0), exp(ln_sd_omega), true);
-    jnll -= dnorm(eps_slope(l), Type(0.0), exp(ln_sd_slope), true);
   }
 
   for(int i=0; i<Nobs; i++){
@@ -107,10 +101,9 @@ Type objective_function<Type>::operator() ()
     Type linf  = 0;
     Type t0    = 0;
 
-    omega = exp(ln_global_omega) +                         //intercept
-      eta_fixed_i(i) +                                     //fixed effects
-      (mu_slope + eps_slope(lake_i(i)))*within_lake_i(i) + //random slope
-      eps_omega(lake_i(i));                                //std ran eff
+    omega = exp(ln_global_omega) +            //intercept
+      eta_fixed_i(i) +                        //fixed effects
+      eps_omega(lake_i(i));                   //std ran eff
 
     linf  = exp(ln_global_linf) +             //intercept
       exp(ln_b_sex)*sex_i(i) +                //sex effect
@@ -133,7 +126,7 @@ Type objective_function<Type>::operator() ()
     }
     if(CTL == 3){
       //Gamma
-      if( !isNA(length_i(i)) ) jnll_i(i) -= dgamma( length_i(i), 1/pow(exp(ln_cv),2), length_pred(i)*pow(exp(ln_cv),2), true ); 
+      if( !isNA(length_i(i)) ) jnll_i(i) -= dgamma( length_i(i), 1/pow(exp(ln_cv),2), length_pred(i)*pow(exp(ln_cv),2), true );
     }
     // Running counter
     if( predTF_i(i)==0 ) jnll += jnll_i(i); //estimation

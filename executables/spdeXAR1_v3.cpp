@@ -57,7 +57,6 @@ Type objective_function<Type>::operator() ()
   DATA_IVECTOR(lake_i);        //grouping factor for lake
   DATA_VECTOR(sex_i);          //factor for sex
   DATA_MATRIX(X_ij_omega);     //covariate matrix for omega
-  DATA_VECTOR(within_lake_i);  //density centered within lake i
   DATA_INTEGER(Nlakes);        //Number of lakes
 
   // SPDE objects
@@ -74,19 +73,16 @@ Type objective_function<Type>::operator() ()
   PARAMETER(ln_global_omega);
   PARAMETER(ln_global_linf);
   PARAMETER(ln_sd_linf);
-  PARAMETER(ln_sd_slope);
 
   PARAMETER(global_tzero);
   PARAMETER(ln_sd_tzero);
   PARAMETER(ln_b_sex);         //parameter for sex effect on Linf
   PARAMETER_VECTOR(b_j_omega);
-  PARAMETER(mu_slope);
 
   //Random coefficients
   PARAMETER_ARRAY(eps_omega_st);
   PARAMETER_VECTOR(eps_linf);
   PARAMETER_VECTOR(eps_t0);
-  PARAMETER_VECTOR(eps_slope);
 
   //Likelihood error term
   PARAMETER(ln_cv);
@@ -94,7 +90,7 @@ Type objective_function<Type>::operator() ()
   //spatial-temporal terms
   PARAMETER( ln_kappa );       //matern kappa
   PARAMETER( ln_tau_O );       //spatial noise
-  PARAMETER( rho );            //autocorrelation term
+  PARAMETER( logit_rho );            //autocorrelation term
 
   //calculate the fixed effects:
   vector<Type> eta_fixed_i = X_ij_omega * b_j_omega;
@@ -117,14 +113,15 @@ Type objective_function<Type>::operator() ()
   for(int l=0; l<Nlakes; l++){
     jnll -= dnorm(eps_linf(l), Type(0.0), exp(ln_sd_linf), true);
     jnll -= dnorm(eps_t0(l), Type(0.0), exp(ln_sd_tzero), true);
-    jnll -= dnorm(eps_slope(l), Type(0.0), exp(ln_sd_slope), true);
   }
 
   // Probability of spatial-temporal random coefficients
   SparseMatrix<Type> Q = R_inla::Q_spde(spdeMatrices, exp(ln_kappa));
-  jnll += SCALE(SEPARABLE(AR1(minus_one_to_one(rho)), GMRF(Q)), 1.0 / exp(ln_tau_O))(eps_omega_st);
+  jnll += SCALE(SEPARABLE(AR1(minus_one_to_one(logit_rho)), GMRF(Q)), 1.0 / exp(ln_tau_O))(eps_omega_st);
 
   vector<Type> eps_i (Nobs);
+  vector<Type> omega_i (Nobs);
+
   for(int i=0; i<Nobs; i++){
     Type omega = 0;
     Type linf  = 0;
@@ -132,10 +129,9 @@ Type objective_function<Type>::operator() ()
 
     eps_i(i) = eps_omega_st( s_i(i), t_i(i) );
 
-    omega = exp(ln_global_omega) +                              //intercept
-            eta_fixed_i(i) +                                    //fixed effects
-            (mu_slope + eps_slope(lake_i(i)))*within_lake_i(i) +//random slope
-            eps_i(i);                                           //AR-1 ST
+    omega_i(i) = exp(ln_global_omega) +                    //intercept
+                 eta_fixed_i(i) +                          //fixed effects
+                 eps_i(i);                                 //AR-1 ST
 
     linf  = exp(ln_global_linf) +                          //intercept
             exp(ln_b_sex)*sex_i(i) +                       //sex effect
@@ -144,7 +140,7 @@ Type objective_function<Type>::operator() ()
     t0    = global_tzero +                                 //intercpet
             eps_t0(lake_i(i));                             //std ran eff
 
-    length_pred(i) = linf*(1-exp(-(omega/linf) * (age_i (i) - t0 )));
+    length_pred(i) = linf*(1-exp(-(omega_i(i)/linf) * (age_i (i) - t0 )));
 
     //CYO likelihood:
     if(CTL == 1){
@@ -168,9 +164,9 @@ Type objective_function<Type>::operator() ()
   //Reporting
   ADREPORT(Range);
   ADREPORT(SigmaO);
-  ADREPORT(rho);
   REPORT(length_pred);
   REPORT(eps_i);
+  REPORT(omega_i);
   REPORT(pred_jnll);
 
   return jnll;
