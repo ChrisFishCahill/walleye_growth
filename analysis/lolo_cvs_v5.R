@@ -212,8 +212,7 @@ for(model in unique(CVs$Model)){
 
       opt_spatial  = TMBhelper::Optimize(obj=obj_spatial,
                                          control=list(eval.max=1000, iter.max=1000),
-                                         getsd=T, newtonsteps=1, bias.correct=F,
-                                         lower=c(rep(-Inf,13),-0.999), upper=c(rep(Inf,13),0.999))
+                                         getsd=T, newtonsteps=1, bias.correct=F)
 
       rep <- obj_spatial$report()
     }
