@@ -98,6 +98,167 @@ rep <- obj_spatial$report()
 Range <- opt_spatial$SD["value"]$value[which(names(opt_spatial$SD["value"]$value)=="Range")]
 Range
 
+#nonspatial model:
+VersionNonSpatial = "vb_nonspatial"
+compile(paste0(VersionNonSpatial, ".cpp"))
+dyn.load( dynlib(VersionNonSpatial) )
+
+dyn.load( dynlib(VersionNonSpatial) )
+
+random_nonspatial = c("eps_linf", "eps_t0", "eps_omega")
+
+data_nonspatial = list("Nobs"=nrow(data), "length_i"=data$TL, "age_i" = data$Age,
+                       "lake_i" = data$Lake - 1, "X_ij_omega"= model.matrix(~ -1 + data$wallEffDen.Std +
+                                                                              data$compEffDen.Std +
+                                                                              data$GDD.Std  +
+                                                                              data$wallEffDen.Std:data$compEffDen.Std),
+                       "sex_i" = data$SexCode,"Nlakes" = length(unique(data$Lake)),"CTL" = CTL,
+                       "predTF_i"=Partition_i)
+
+
+parameters_nonspatial = list("ln_global_omega" = log(14),
+                             "ln_global_linf" = log(45), "ln_sd_linf" = log(7), "global_tzero" = -1,
+                             "ln_sd_tzero" = log(3), "ln_b_sex" = log(4.760871), "b_j_omega" = rep(0, ncol(data_nonspatial$X_ij_omega)),
+                             "eps_omega" = rep(0, data_nonspatial$Nlakes ), "eps_linf" = rep(0, data_nonspatial$Nlakes ),
+                             "eps_t0" = rep(0, data_nonspatial$Nlakes ),"ln_cv" = log(0.2), "ln_sd_omega" = log(4.5) )
+
+#Re-run with REML
+Use_REML=T
+if( Use_REML==TRUE ) random_nonspatial = union( random_nonspatial, c("ln_global_omega",
+                                                                     "ln_global_linf", "global_tzero",
+                                                                     "ln_b_sex", "b_j_omega") )
+
+obj_nonspatial <- MakeADFun(data=data_nonspatial, parameters=parameters_nonspatial,
+                            random=random_nonspatial, hessian=FALSE, DLL=VersionNonSpatial)
+
+opt_nonspatial = TMBhelper::Optimize(obj=obj_nonspatial,
+                                     control=list(eval.max=1000, iter.max=1000),
+                                     getsd=T, newtonsteps=1, bias.correct=F)
+
+SDnonspatial = sdreport( obj_nonspatial )
+final_gradient = obj_nonspatial$gr( opt_nonspatial$par )
+if( any(abs(final_gradient)>0.0001) | SDnonspatial$pdHess==FALSE ) stop("Not converged")
+
+rep_nonspatial <- obj_nonspatial$report()
+
+
+#Extract the intercept and SE
+ParHat_nonspatial = as.list( opt_nonspatial$SD, "Estimate" )
+SEHat_nonspatial  = as.list( opt_nonspatial$SD, "Std. Error" )
+
+ParHat_nonspatial$b_j_omega
+SEHat_nonspatial$b_j_omega
+
+#---------
+#Run the reduced models
+#---------
+#Run best nonspatial/spatial models with REML--LogNormal model (best as judged via PredNLL)
+CTL <- 2 #lognormal
+Partition_i <- rep(0, nrow(data)) #fit to all data
+
+Use_REML=T
+if( Use_REML==TRUE ) random_spatial = union( random_spatial, c("ln_global_omega",
+                                                               "ln_global_linf", "global_tzero",
+                                                               "ln_b_sex", "b_j_omega") )
+
+data_spatial = list("Nobs" = nrow(data), "length_i" = data$TL, "age_i" = data$Age,
+                    "lake_i" = data$Lake - 1, "sex_i" = data$SexCode,
+                    "X_ij_omega"= model.matrix(~ -1 + data$wallEffDen.Std + data$compEffDen.Std +
+                                                 data$GDD.Std),
+                    "Nlakes" = length(unique(data$Lake)), "spdeMatrices" = spdeMatrices, "s_i" = data$Lake-1,
+                    "t_i" = data$Year-1, "CTL" = CTL, "predTF_i"=Partition_i)
+
+parameters_spatial = list("ln_global_omega" = log(13.28954),
+                          "ln_global_linf" = log(55),
+                          "ln_sd_linf" = log(7.275452),
+                          "global_tzero" = -1.260783461,
+                          "ln_sd_tzero" = log(0.538755),
+                          "ln_b_sex" = log(4.760871),
+                          "b_j_omega" = rep(0, ncol(data_spatial$X_ij_omega)),
+                          "eps_omega_st" = matrix(0,  nrow=mesh$n,ncol=max(data$Year) ),
+                          "eps_linf" = rep(0,  length(unique(data$Lake))),
+                          "eps_t0" = rep(0, length(unique(data$Lake))),
+                          "ln_cv" = -2.5043055,
+                          "ln_kappa" = -2.7,
+                          "ln_tau_O" = 0,
+                          "logit_rho" = 2.9 )
+
+obj_spatial = MakeADFun(data=data_spatial, parameters=parameters_spatial,
+                        random=random_spatial, hessian=FALSE, DLL=VersionSpatial)
+
+opt_spatial_reduced  = TMBhelper::Optimize(obj=obj_spatial,
+                                   control=list(eval.max=1000, iter.max=1000),
+                                   getsd=T, newtonsteps=1, bias.correct=T)
+
+SD = sdreport( obj_spatial )
+final_gradient = obj_spatial$gr( opt_spatial_reduced$par )
+if( any(abs(final_gradient)>0.0001) | SD$pdHess==FALSE ) stop("Not converged")
+
+#Extract the intercept and SE
+ParHat_reduced = as.list( opt_spatial_reduced$SD, "Estimate" )
+SEHat_reduced  = as.list( opt_spatial_reduced$SD, "Std. Error" )
+
+
+#-------------
+#Nonspatial reduced#
+#-------------
+
+VersionNonSpatial = "vb_nonspatial"
+compile(paste0(VersionNonSpatial, ".cpp"))
+dyn.load( dynlib(VersionNonSpatial) )
+
+dyn.load( dynlib(VersionNonSpatial) )
+
+random_nonspatial = c("eps_linf", "eps_t0", "eps_omega")
+
+data_nonspatial = list("Nobs"=nrow(data), "length_i"=data$TL, "age_i" = data$Age,
+                       "lake_i" = data$Lake - 1, "X_ij_omega"= model.matrix(~ -1 + data$wallEffDen.Std +
+                                                                              data$compEffDen.Std +
+                                                                              data$GDD.Std ),
+                       "sex_i" = data$SexCode,"Nlakes" = length(unique(data$Lake)),"CTL" = CTL,
+                       "predTF_i"=Partition_i)
+
+parameters_nonspatial = list("ln_global_omega" = log(14),
+                             "ln_global_linf" = log(45), "ln_sd_linf" = log(7), "global_tzero" = -1,
+                             "ln_sd_tzero" = log(3), "ln_b_sex" = log(4.760871), "b_j_omega" = rep(0, ncol(data_nonspatial$X_ij_omega)),
+                             "eps_omega" = rep(0, data_nonspatial$Nlakes ), "eps_linf" = rep(0, data_nonspatial$Nlakes ),
+                             "eps_t0" = rep(0, data_nonspatial$Nlakes ),"ln_cv" = log(0.2), "ln_sd_omega" = log(4.5) )
+
+#Re-run with REML
+Use_REML=T
+if( Use_REML==TRUE ) random_nonspatial = union( random_nonspatial, c("ln_global_omega",
+                                                                     "ln_global_linf", "global_tzero",
+                                                                     "ln_b_sex", "b_j_omega") )
+
+obj_nonspatial <- MakeADFun(data=data_nonspatial, parameters=parameters_nonspatial,
+                            random=random_nonspatial, hessian=FALSE, DLL=VersionNonSpatial)
+
+opt_nonspatial_reduced = TMBhelper::Optimize(obj=obj_nonspatial,
+                                     control=list(eval.max=1000, iter.max=1000),
+                                     getsd=T, newtonsteps=1, bias.correct=F)
+
+SDnonspatial = sdreport( obj_nonspatial )
+final_gradient = obj_nonspatial$gr( opt_nonspatial_reduced$par )
+if( any(abs(final_gradient)>0.0001) | SDnonspatial$pdHess==FALSE ) stop("Not converged")
+
+rep_nonspatial_reduced <- obj_nonspatial$report()
+
+#Extract the intercept and SE
+ParHat_nonspatial_reduced = as.list( opt_nonspatial_reduced$SD, "Estimate" )
+SEHat_nonspatial_reduced  = as.list( opt_nonspatial_reduced$SD, "Std. Error" )
+
+ParHat$b_j_omega[4]
+SEHat$b_j_omega[4]
+ParHat_nonspatial$b_j_omega[4]
+SEHat_nonspatial$b_j_omega[4]
+
+ParHat_reduced$b_j_omega
+SEHat_reduced$b_j_omega
+
+ParHat_nonspatial_reduced$b_j_omega
+SEHat_nonspatial_reduced$b_j_omega
+
+
 #----------
 #Make the flying spaghetti monster (seizure) plot:
 #----------
@@ -314,3 +475,141 @@ hist(dist(loc_xy), xlab="Distance between Lakes (km)", main="", cex.lab = 1.25,
      breaks=40, bty="o", cex.axis=1.15, yaxs="i", las=1)
 abline(v=Range, lty=3, lwd=6, col="Steelblue")
 dev.off()
+
+#----------------------------------------------
+#Comparison of key parameters
+#Interaction comes from full model, others from not full model
+#----------------------------------------------
+
+NumberOfBetas <-  length(ParHat_nonspatial_reduced$b_j_omega)+1 #for interaction
+
+Combined <- rbind(ParHat_nonspatial_reduced$b_j_omega + SEHat_nonspatial_reduced$b_j_omega%o%qnorm(c(0.025,0.50, 0.975)),
+                  ParHat_nonspatial$b_j_omega[4] + SEHat_nonspatial$b_j_omega[4]%o%qnorm(c(0.025,0.50, 0.975)),
+                  ParHat_reduced$b_j_omega + SEHat_reduced$b_j_omega%o%qnorm(c(0.025,0.50, 0.975)),
+                  ParHat$b_j_omega[4] + SEHat$b_j_omega[4]%o%qnorm(c(0.025,0.50, 0.975)))
+
+colnames(Combined) <- c("lower95%", "MLE", "upper95%")
+Combined <- as.data.frame(Combined)
+
+Combined$WhichModel <- rep(c("Nonspatial", "Spatial"),
+                           each = NumberOfBetas)
+
+Combined$WhichModel <- factor(Combined$WhichModel, levels=c(rep(c("Nonspatial", "Spatial"))))
+
+Combined$WhichVariable <- rep(c("Walleye Density", "Competitor Density", "GDD", "Density Interaction"), 2)
+
+Combined$WhichVariable <- factor(Combined$WhichVariable, levels=c("Walleye Density", "Competitor Density",
+                                                                  "GDD", "Density Interaction"))
+colnames(Combined) <- c("Lo", "Mean", "Up", "WhichModel", "WhichVariable")
+Combined
+
+Combined <- Combined %>% mutate(WhichVariable2 = case_when(
+  WhichVariable == "Walleye Density" ~  as.character(parse(text= paste("beta[1] ~", "Intraspecific~Density"  ) )),
+  WhichVariable == "GDD" ~  as.character(parse(text= paste("beta[2] ~", "GDD"  ) )),
+  WhichVariable == "Competitor Density"  ~ as.character(parse(text= paste("beta[3] ~", "Interspecific~Density"  ) )),
+  WhichVariable == "Density Interaction" ~  as.character(parse(text= paste("beta[4] ~", "Density~Interaction"  ) ))))
+
+p <- ggplot() + theme_bw()
+p <- p + geom_point(data = Combined,
+                    aes(x = WhichModel,
+                        y = Mean)
+)
+
+p <- p + geom_linerange(data = Combined,
+                       aes(x = WhichModel,
+                           ymax = Up,
+                           ymin = Lo))
+
+p <- p + geom_abline(slope=0, intercept=0, linetype="longdash", size=1.0, colour="steelblue")
+p <- p + xlab("Parameter") + ylab("Value")
+
+p <- p + facet_wrap( ~ WhichVariable2, scales = "free_y", nrow=1,
+                     labeller = label_parsed)
+p <- p + theme(plot.title = element_text(hjust = 0.5, size=14),
+      axis.title = element_text(size=14),
+      axis.text.x = element_text(size=12),
+      axis.text.y = element_text(size=12),
+      legend.key=element_blank(),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      strip.text.x = element_text(size = 15, colour = "black") )
+
+p <- p + labs(fill = "")
+p
+
+ggsave("C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/plots/parameter_comparison.png",
+        p, width=11, height=5,
+        units=c("in"), dpi = 1200 )
+
+#----------------------------------
+#H-block cross validation visualizations
+#----------------------------------
+
+#h (block) cross validation:
+data$X_TTM_c <- data$X_TTM_c/1000
+data$Y_TTM_c <- data$Y_TTM_c/1000
+loc_xy <- unique(data[ ,c("X_TTM_c","Y_TTM_c") ] )
+
+loc_xy <- as.data.frame(loc_xy)
+names(loc_xy) <- c("X_TTM_c", "Y_TTM_c")
+
+# Declare blocks for h-block cross-validation
+# Picked these visually, could also use k-means.  These clusters seem reasonable.
+loc_xy$Block = NA
+loc_xy[which(loc_xy$X_TTM_c < 400 & loc_xy$Y_TTM_c > 6400),"Block" ] <- 1
+loc_xy[which(loc_xy$X_TTM_c < 410 & loc_xy$Y_TTM_c < 6200 & is.na(loc_xy$Block)),"Block" ] <- 2
+loc_xy[which(loc_xy$X_TTM_c < 450 & loc_xy$Y_TTM_c < 6000 & is.na(loc_xy$Block)),"Block" ] <- 2
+loc_xy[which(loc_xy$X_TTM_c < 500 & loc_xy$Y_TTM_c > 6100 & is.na(loc_xy$Block)),"Block" ] <- 3
+loc_xy[which(loc_xy$X_TTM_c < 660 & loc_xy$Y_TTM_c > 6000 & is.na(loc_xy$Block)),"Block" ] <- 4
+loc_xy[which(loc_xy$X_TTM_c < 625 & loc_xy$Y_TTM_c < 6000 & is.na(loc_xy$Block)),"Block" ] <- 5
+loc_xy[which(loc_xy$Y_TTM_c < 5800 & is.na(loc_xy$Block)),"Block" ] <- 6
+loc_xy[which(loc_xy$X_TTM_c > 660 & loc_xy$Y_TTM_c > 5800 & is.na(loc_xy$Block)),"Block" ] <- 7
+
+ggplot(loc_xy,aes(x=X_TTM_c,y=Y_TTM_c, color=as.factor(Block)))+geom_point()+
+  theme_bw() + scale_colour_manual(values = RColorBrewer::brewer.pal(7, "Dark2") )
+
+can1<-raster::getData('GADM', country="CAN", level=1)
+alta = can1[can1$NAME_1 %in% "Alberta", ]
+
+plot(alta)
+points(data$Long_c, data$Lat_c)
+
+alta = can1[can1$NAME_1 %in% "Alberta", ]
+str(alta)
+class(alta)
+
+alta <- spTransform(alta,
+                    CRS("+proj=longlat +datum=WGS84"))
+alta.fort = fortify(alta)
+
+names(alta.fort)[1] <- "Long_c"
+names(alta.fort)[2] <- "Lat_c"
+
+data <- left_join(data,loc_xy)
+
+p <- ggplot(NULL) + theme_classic( ) +
+  geom_polygon(colour="black", fill="white", data=alta.fort, aes(x=Long_c, y=Lat_c, group=id)) +
+  geom_point( pch=21, size=2.0, data=data, aes(Long_c, Lat_c, fill=as.factor(Block)) ) +
+  scale_fill_manual(values = RColorBrewer::brewer.pal(7, "Dark2"), name="Spatial \n Block" ) +
+  scale_x_continuous(breaks=c(-120, -115, -110)) +
+  scale_y_continuous(breaks=c(49,52,56,60))
+p
+
+
+p <- p +
+  ylab("Latitude") + xlab("Longitude") +
+  theme(axis.title=element_text(size=15),
+        strip.background = element_blank(),
+        strip.text.x = element_blank(),
+        panel.spacing.x=unit(1, "lines"),
+        panel.spacing.y=unit(0.5, "lines"))
+p
+
+p <- p + ggalt::coord_proj(
+  paste0(CRS("+proj=tmerc +lat_0=0 +lon_0=-115 +k=0.9992 +x_0=500000 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs ")))
+
+
+ggsave("C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/plots/h_block.tiff",
+       p, dpi=1200, width=8, height=11, units=c("in"))
+
+
