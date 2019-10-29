@@ -408,8 +408,8 @@ AICs$AIC_REML[which(AICs$Model=="Gamma_Nonspatial_Reduced")] <- opt_nonspatial$A
 loc_xy <- unique(data[ ,c("X_TTM_c","Y_TTM_c") ] )
 loc_xy <- loc_xy/1000 #Put distance in kms
 
-mesh = inla.mesh.2d(loc=loc_xy, max.edge=c(62,1000)) #Better mesh, but slower
-#mesh = inla.mesh.create( loc_xy, refine=TRUE, extend=-0.5, cutoff=0.01 ) #faster mesh
+#mesh = inla.mesh.2d(loc=loc_xy, max.edge=c(62,1000)) #Better mesh, but slower
+mesh = inla.mesh.create( loc_xy, refine=TRUE, extend=-0.5, cutoff=0.01 ) #faster mesh
 
 mesh$n
 
@@ -864,5 +864,5 @@ print(AICs)
 saveRDS(AICs, file="C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/analysis/AICs")
 #All spatial-temporal models ~ 9000-1000 points better than analogous nonspatial-temporal models (AIC_REML column)
 #Normal likelihood appears to be most parsimonious (comparing ML AICs among spatial column)
-
+#aics <- readRDS(file="C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/analysis/AICs")
 #------------------------------------------------------------------------------------------------------------
