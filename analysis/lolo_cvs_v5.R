@@ -134,6 +134,7 @@ names(loc_xy) <- c("X_TTM_c", "Y_TTM_c")
 lolo_cvs <- matrix(NA, ncol=length(unique(data$Lake)), nrow=nrow(CVs))
 rownames(lolo_cvs) <- CVs$Model
 
+start_time <- Sys.time()
 for(model in unique(CVs$Model)){
   for(k in unique(data$Lake)){
     if(grepl("Norm", model)){CTL <- 1}
