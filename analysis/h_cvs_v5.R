@@ -145,8 +145,8 @@ ggplot(loc_xy,aes(x=X_TTM_c,y=Y_TTM_c, color=as.factor(Block)))+geom_point()+
   theme_bw() + scale_colour_manual(values = RColorBrewer::brewer.pal(7, "Dark2") )
 
 data <- dplyr::left_join(data, loc_xy, by=c("X_TTM_c", "Y_TTM_c"))
-h_cvs <- matrix(NA, ncol=length(unique(data$Block)), nrow=nrow(AICs))
-rownames(h_cvs) <- AICs$Model
+h_cvs <- matrix(NA, ncol=length(unique(data$Block)), nrow=nrow(CVs))
+rownames(h_cvs) <- CVs$Model
 
 for(model in unique(CVs$Model)){
   for(k in unique(data$Block)){
