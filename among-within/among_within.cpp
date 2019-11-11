@@ -14,6 +14,7 @@
 *                       Probability of Random Coefficients:
 * epsilon_linf ~ N(0, ln_sd_linf)
 * epsilon_t0 ~ N(0, ln_sd_tzero)
+* eps_beta ~ N(0, ln_sd_beta) --> random slope for walleye dens
 * eps_omega_st = rho*eps_omega_s,t-1 + u_st
 * where u_st ~ N(0, SIMGA) --> SIGMA is estimated as per INLA approach
 *
