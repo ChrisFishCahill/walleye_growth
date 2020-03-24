@@ -5,3 +5,5 @@
 *.dll
 *.o
 *.so
+*.docx
+*.pdf
