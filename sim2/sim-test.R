@@ -5,7 +5,7 @@ library(future)
 plan(multisession, workers = future::availableCores() / 2)
 
 get_sim_data <- function(Nyears = 10, Nlakes = 12, Nfish = 25,
-                         Linf = 55, T0 = -1, SigO = 0.6, cv = 0.15, omega_global = 14,
+                         Linf = 55, T0 = -1, SigO = 0.8, cv = 0.2, omega_global = 14,
                          sig_varies = c("fixed", "by lake", "by time", "both")) {
   sig_varies <- match.arg(sig_varies)
   if (sig_varies == "fixed") {
@@ -38,10 +38,25 @@ ggplot(out, aes(ages, y_i)) +
   facet_grid(sim_iter ~ lake) +
   geom_point(alpha = 0.2)
 
+out <- get_sim_data(Nlakes = 5, Nyears = 7, Nfish = 100, cv = 0.01, sig_varies = "by time")
+ggplot(out, aes(ages, y_i)) +
+  facet_grid(year ~ lake) +
+  geom_point(alpha = 0.2)
+
+out <- get_sim_data(Nlakes = 5, Nyears = 7, Nfish = 100, cv = 0.01, sig_varies = "by lake")
+ggplot(out, aes(ages, y_i)) +
+  facet_grid(year ~ lake) +
+  geom_point(alpha = 0.2)
+
+out <- get_sim_data(Nlakes = 5, Nyears = 7, Nfish = 100, cv = 0.01, sig_varies = "both")
+ggplot(out, aes(ages, y_i)) +
+  facet_grid(year ~ lake) +
+  geom_point(alpha = 0.2)
+
 TMB::compile("sim2/vb_nonspatial.cpp")
 
 fit_sim <- function(Nyears = 10, Nlakes = 10, Nfish = 20,
-  Linf = 55, T0 = -1, SigO = 0.6, cv = 0.15, omega_global = 14,
+  Linf = 55, T0 = -1, SigO = 0.8, cv = 0.2, omega_global = 14,
   sig_varies = c("fixed", "by lake", "by time", "both"),
   sig_varies_fitted = c("fixed", "by lake", "by time", "both"),
   iter = NA) {
@@ -80,12 +95,14 @@ fit_sim <- function(Nyears = 10, Nlakes = 10, Nfish = 20,
   )
 
   if (sig_varies_fitted %in% c("fixed", "by lake")) {
-    map <- c(map, list(eps_omega_time = as.factor(rep(NA, length(unique(sim_dat$year)))),
+    map <- c(map, list(
+      eps_omega_time = as.factor(rep(NA, length(unique(sim_dat$year)))),
       ln_sd_omega_time = factor(NA)
     ))
   }
   if (sig_varies_fitted %in% c("fixed", "by time")) {
-    map <- c(map, list(eps_omega_lake = as.factor(rep(NA, length(unique(sim_dat$lake)))),
+    map <- c(map, list(
+      eps_omega_lake = as.factor(rep(NA, length(unique(sim_dat$lake)))),
       ln_sd_omega_lake = factor(NA)
     ))
   }
@@ -103,22 +120,26 @@ fit_sim <- function(Nyears = 10, Nlakes = 10, Nfish = 20,
     sig_varies = sig_varies,
     sig_varies_fitted = sig_varies_fitted,
     ln_global_omega = opt$par[["ln_global_omega"]],
+    ln_sd_omega_lake = if ("ln_sd_omega_lake" %in% names(map)) NA else opt$par[["ln_sd_omega_lake"]],
+    ln_sd_omega_time = if ("ln_sd_omega_time" %in% names(map)) NA else opt$par[["ln_sd_omega_time"]],
     true_ln_global_omega = log(sim_dat$omega_global[1]),
     iter = iter
   )
 }
 
 totest <- tidyr::expand_grid(
-  iter = seq_len(50),
+  iter = seq_len(200L),
   sig_varies = c("by lake", "by time", "both"),
   sig_varies_fitted = c("by lake", "by time", "both")
 )
 nrow(totest)
-set.seed(912838)
-# out <- purrr::pmap_dfr(totest, fit_sim)
-system.time({
-  out <- furrr::future_pmap_dfr(totest, fit_sim)
-})
-ggplot(out, aes(ln_global_omega)) + geom_histogram(bins = 25) +
+set.seed(1234)
+# out <- purrr::pmap_dfr(totest, fit_sim) # for testing
+system.time({out <- furrr::future_pmap_dfr(totest, fit_sim)})
+
+out %>%
+  dplyr::mutate(sig_varies = paste0("Sim = ", sig_varies)) %>%
+  dplyr::mutate(sig_varies_fitted = paste0("Fitted = ", sig_varies_fitted)) %>%
+  ggplot(aes(ln_global_omega)) + geom_histogram(bins = 25) +
   geom_vline(xintercept = out[["true_ln_global_omega"]][1]) +
   facet_grid(sig_varies_fitted~sig_varies)
