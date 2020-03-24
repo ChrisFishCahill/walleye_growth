@@ -106,22 +106,20 @@ fit_sim <- function(Nyears = 10, Nlakes = 10, Nfish = 20,
       ln_sd_omega_lake = factor(NA)
     ))
   }
+
   sink(tempfile())
   dyn.load(dynlib("sim2/vb_nonspatial"))
   obj <- TMB::MakeADFun(data, parameters, DLL = "vb_nonspatial",
-    random = c("eps_omega_lake", "eps_omega_time", "eps_linf", "eps_t0"), map = map,
+    random = c("eps_omega_lake", "eps_omega_time", "eps_linf", "eps_t0"),
+    map = map,
     silent = TRUE)
   opt <- nlminb(obj$par, obj$fn, obj$gr)
   dyn.unload(dynlib("sim2/vb_nonspatial"))
   sink()
-  # sdr <- TMB::sdreport(obj)
-  # sdr
   tibble::tibble(
     sig_varies = sig_varies,
     sig_varies_fitted = sig_varies_fitted,
     ln_global_omega = opt$par[["ln_global_omega"]],
-    ln_sd_omega_lake = if ("ln_sd_omega_lake" %in% names(map)) NA else opt$par[["ln_sd_omega_lake"]],
-    ln_sd_omega_time = if ("ln_sd_omega_time" %in% names(map)) NA else opt$par[["ln_sd_omega_time"]],
     true_ln_global_omega = log(sim_dat$omega_global[1]),
     iter = iter
   )
@@ -134,8 +132,8 @@ totest <- tidyr::expand_grid(
 )
 nrow(totest)
 set.seed(1234)
-# out <- purrr::pmap_dfr(totest, fit_sim) # for testing
-system.time({out <- furrr::future_pmap_dfr(totest, fit_sim)})
+out <- purrr::pmap_dfr(totest, fit_sim) # for testing
+# system.time({out <- furrr::future_pmap_dfr(totest, fit_sim)})
 
 saveRDS(out, file = "sim2/sim2.rds")
 out <- readRDS("sim2/sim2.rds")
@@ -144,14 +142,19 @@ out %>%
   dplyr::mutate(sig_varies_fitted = paste0("Fitted = ", sig_varies_fitted)) %>%
   ggplot(aes(ln_global_omega)) + geom_histogram(bins = 25) +
   geom_vline(xintercept = out[["true_ln_global_omega"]][1]) +
-  facet_grid(sig_varies_fitted~sig_varies)
+  facet_grid(sig_varies_fitted~sig_varies) +
+  xlab(expression(omega)) +
+  ylab("Count")
+ggsave("sim2/hist-sim.pdf", width = 7, height = 5)
 
 out %>%
   dplyr::mutate(Matched = ifelse(sig_varies_fitted == sig_varies, TRUE, FALSE)) %>%
-  ggplot(aes(sig_varies, exp(ln_global_omega), colour = sig_varies_fitted, fill = Matched)) + geom_boxplot() +
+  ggplot(aes(sig_varies, exp(ln_global_omega), colour = sig_varies_fitted, fill = Matched)) +
+  geom_boxplot() +
   geom_hline(yintercept = exp(out[["true_ln_global_omega"]][1])) +
   xlab(expression(Simulated~omega~variation)) +
   labs(colour = expression(Fitted~omega~variation)) +
   scale_color_brewer(palette = "Dark2") +
   scale_fill_manual(values = c("white", "grey60")) +
   ylab(expression(omega[0]))
+ggsave("sim2/boxplot-sim.pdf", width = 7, height = 5)
