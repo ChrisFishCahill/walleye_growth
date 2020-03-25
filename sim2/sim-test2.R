@@ -250,7 +250,7 @@ totest <- tidyr::expand_grid(
   sig_varies_fitted = c("by lake", "by time", "both", "ar1")
 )
 system.time({
-  purrr::pmap_dfr(totest, fit_sim, silent = TRUE) # testing
+  out <- purrr::pmap_dfr(totest, fit_sim, silent = TRUE) # testing
 })
 
 totest <- tidyr::expand_grid(
