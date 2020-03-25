@@ -1,4 +1,3 @@
-#TODO--is there a smarter way to pass the mesh from get_sim_data to fit_sim?
 #TODO--convergence checks?
 #TODO--fixed estimation does not work
 library(ggplot2)
@@ -57,12 +56,15 @@ get_sim_data <- function(Nyears = 10, Nlakes = 12, Nfish = 25,
     which_y <- Loc[lake, 2]
     which_omega_dev_st <- omega_dev_st[lake, year]
     y_i <- rlnorm(Nfish, log(lpreds), cv)
-    tibble::tibble(y_i, ages,
-      lake = lake, year = year,
-      linf = Linf, t0 = T0, omega_global = omega_global,
-      rho = rho, kappa = kappa, SigO = SigO,
-      x = rep(which_x, Nfish), y = rep(which_y, Nfish),
-      omega_dev_st = rep(which_omega_dev_st, Nfish)
+    list(
+      mesh = mesh,
+      dat = tibble::tibble(y_i, ages,
+        lake = lake, year = year,
+        linf = Linf, t0 = T0, omega_global = omega_global,
+        rho = rho, kappa = kappa, SigO = SigO,
+        x = rep(which_x, Nfish), y = rep(which_y, Nfish),
+        omega_dev_st = rep(which_omega_dev_st, Nfish)
+      )
     )
   })
 }
@@ -122,16 +124,14 @@ fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
   #iter=1
   sig_varies <- match.arg(sig_varies)
 
-  sim_dat <- get_sim_data(
+  sim <- get_sim_data(
     Nyears = Nyears, Nlakes = Nlakes, Nfish = Nfish,
     Linf = Linf, T0 = T0, SigO = SigO, cv = cv, omega_global = omega_global,
     rho = rho, kappa = kappa,
     sig_varies = sig_varies
   )
-
-  Loc <- unique(sim_dat[, c("x", "y")])
-
-  mesh <- inla.mesh.create(Loc, refine = TRUE, extend = -0.5, cutoff = 0.01)
+  sim_dat <- sim$dat
+  mesh <- sim$mesh
   spde <- inla.spde2.matern(mesh, alpha = 2)
   spdeMatrices <- spde$param.inla[c("M0", "M1", "M2")]
 
