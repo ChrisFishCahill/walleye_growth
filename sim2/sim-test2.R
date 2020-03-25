@@ -14,8 +14,8 @@ get_sim_data <- function(Nyears = 10, Nlakes = 12, Nfish = 25,
                          rho = 0, kappa = 10,
                          sig_varies = c("fixed", "by lake", "by time", "both", "ar1")) {
   sig_varies <- match.arg(sig_varies)
-  # browser()
   omega_dev_st <- matrix(0, nrow = Nlakes, ncol = Nyears) # omega_dev_st all zero unless "ar1" selected
+  Loc <- cbind("x" = runif(Nlakes, min = 0, max = 10), "y" = runif(Nlakes, min = 0, max = 10))
   if (sig_varies == "fixed") {
     omega_dev_lake <- rnorm(Nlakes, 0, 0)
     omega_dev_time <- rnorm(Nyears, 0, 0)
@@ -33,7 +33,6 @@ get_sim_data <- function(Nyears = 10, Nlakes = 12, Nfish = 25,
     omega_dev_lake <- rnorm(Nlakes, 0, 0)
     omega_dev_time <- rnorm(Nyears, 0, 0)
     # simulate space-time devs a la INLA/GMRFlib:
-    Loc <- cbind("x" = runif(Nlakes, min = 0, max = 10), "y" = runif(Nlakes, min = 0, max = 10))
     mesh <- inla.mesh.create(Loc, refine = TRUE, extend = -0.5, cutoff = 0.01)
     omega_dev_k <- rspde(Loc,
       range = sqrt(8) / kappa,
@@ -58,6 +57,7 @@ get_sim_data <- function(Nyears = 10, Nlakes = 12, Nfish = 25,
     tibble::tibble(y_i, ages,
       lake = lake, year = year,
       linf = Linf, t0 = T0, omega_global = omega_global,
+      rho = rho, kappa = kappa, SigO = SigO,
       x = rep(which_x, Nfish), y = rep(which_y, Nfish),
       omega_dev_st = rep(which_omega_dev_st, Nfish)
     )
@@ -86,7 +86,7 @@ ggplot(out, aes(ages, y_i)) +
   facet_grid(year ~ lake) +
   geom_point(alpha = 0.2)
 
-out <- get_sim_data(Nlakes = 50, Nyears = 7, Nfish = 100, cv = 0.01, rho = 0.5, sig_varies = "ar1")
+out <- get_sim_data(Nlakes = 50, Nyears = 7, Nfish = 100, cv = 0.01, rho = 0.5, kappa=0.5, sig_varies = "ar1")
 
 # ggplot(out, aes(ages, y_i)) +
 #  facet_grid(year ~ lake) +
@@ -97,7 +97,7 @@ ggplot(out, aes(x, y, col = omega_dev_st)) +
   facet_wrap(~year) +
   scale_color_gradient2()
 
-TMB::compile("sim2/vb_nonspatial.cpp")
+TMB::compile("sim2/vb_cyoa.cpp")
 
 fit_sim <- function(Nyears = 10, Nlakes = 10, Nfish = 20,
                     Linf = 55, T0 = -1, SigO = 0.8, cv = 0.2, omega_global = 14,
