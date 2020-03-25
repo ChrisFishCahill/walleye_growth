@@ -18,6 +18,7 @@ get_sim_data <- function(Nyears = 10, Nlakes = 12, Nfish = 25,
   sig_varies <- match.arg(sig_varies)
   omega_dev_st <- matrix(0, nrow = Nlakes, ncol = Nyears) # omega_dev_st all zero unless "ar1" selected
   Loc <- cbind("x" = runif(Nlakes, min = 0, max = 10), "y" = runif(Nlakes, min = 0, max = 10))
+  mesh <- inla.mesh.create(Loc, refine = TRUE, extend = -0.5, cutoff = 0.01)
   if (sig_varies == "fixed") {
     omega_dev_lake <- rnorm(Nlakes, 0, 0)
     omega_dev_time <- rnorm(Nyears, 0, 0)
@@ -35,7 +36,6 @@ get_sim_data <- function(Nyears = 10, Nlakes = 12, Nfish = 25,
     omega_dev_lake <- rnorm(Nlakes, 0, 0)
     omega_dev_time <- rnorm(Nyears, 0, 0)
     # simulate space-time devs a la INLA/GMRFlib:
-    mesh <- inla.mesh.create(Loc, refine = TRUE, extend = -0.5, cutoff = 0.01)
     omega_dev_k <- rspde(Loc,
       range = sqrt(8) / kappa,
       sigma = SigO, n = Nyears, mesh = mesh,
@@ -48,63 +48,62 @@ get_sim_data <- function(Nyears = 10, Nlakes = 12, Nfish = 25,
   }
 
   to_sim <- tidyr::expand_grid(lake = 1:Nlakes, year = 1:Nyears)
-  purrr::map2_dfr(to_sim$lake, to_sim$year, function(lake, year) {
-    ages <- sample(0:25, Nfish, replace = T)
-    eta_it <- exp(log(omega_global) + omega_dev_time[year] + omega_dev_lake[lake] + omega_dev_st[lake, year])
+  out <- purrr::map2_dfr(to_sim$lake, to_sim$year, function(lake, year) {
+    ages <- sample(0:25, Nfish, replace = TRUE)
+    eta_it <- exp(log(omega_global) + omega_dev_time[year] +
+        omega_dev_lake[lake] + omega_dev_st[lake, year])
     lpreds <- Linf * (1 - exp(-(eta_it / Linf) * (ages - T0)))
     which_x <- Loc[lake, 1]
     which_y <- Loc[lake, 2]
     which_omega_dev_st <- omega_dev_st[lake, year]
     y_i <- rlnorm(Nfish, log(lpreds), cv)
-    list(
-      mesh = mesh,
-      dat = tibble::tibble(y_i, ages,
-        lake = lake, year = year,
-        linf = Linf, t0 = T0, omega_global = omega_global,
-        rho = rho, kappa = kappa, SigO = SigO,
-        x = rep(which_x, Nfish), y = rep(which_y, Nfish),
-        omega_dev_st = rep(which_omega_dev_st, Nfish)
-      )
+    tibble::tibble(y_i, ages,
+      lake = lake, year = year,
+      linf = Linf, t0 = T0, omega_global = omega_global,
+      rho = rho, kappa = kappa, SigO = SigO,
+      x = rep(which_x, Nfish), y = rep(which_y, Nfish),
+      omega_dev_st = rep(which_omega_dev_st, Nfish)
     )
   })
+  list(dat = out, mesh = mesh)
 }
 
 out <- purrr::map_dfr(seq_len(5), function(x) {
-  get_sim_data(Nlakes = 5, sig_varies = "by lake")
+  get_sim_data(Nlakes = 5, sig_varies = "by lake")$dat
 }, .id = "sim_iter")
 ggplot(out, aes(ages, y_i)) +
   facet_grid(sim_iter ~ lake) +
   geom_point(alpha = 0.2)
 
-out <- get_sim_data(Nlakes = 5, Nyears = 7, Nfish = 100, cv = 0.01, sig_varies = "by time")
+out <- get_sim_data(Nlakes = 5, Nyears = 7, Nfish = 100, cv = 0.01, sig_varies = "by time")$dat
 ggplot(out, aes(ages, y_i)) +
   facet_grid(year ~ lake) +
   geom_point(alpha = 0.2)
 
-out <- get_sim_data(Nlakes = 5, Nyears = 7, Nfish = 100, cv = 0.01, sig_varies = "by lake")
+out <- get_sim_data(Nlakes = 5, Nyears = 7, Nfish = 100, cv = 0.01, sig_varies = "by lake")$dat
 ggplot(out, aes(ages, y_i)) +
   facet_grid(year ~ lake) +
   geom_point(alpha = 0.2)
 
-out <- get_sim_data(Nlakes = 5, Nyears = 7, Nfish = 100, cv = 0.01, sig_varies = "both")
+out <- get_sim_data(Nlakes = 5, Nyears = 7, Nfish = 100, cv = 0.01, sig_varies = "both")$dat
 ggplot(out, aes(ages, y_i)) +
   facet_grid(year ~ lake) +
   geom_point(alpha = 0.2)
 
-out <- get_sim_data(Nlakes = 50, Nyears = 7, Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5, sig_varies = "ar1")
+out <- get_sim_data(Nlakes = 50, Nyears = 7, Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5, sig_varies = "ar1")$dat
 
 ggplot(out, aes(x, y, col = omega_dev_st)) +
   geom_point() +
   facet_wrap(~year) +
   scale_color_gradient2()
 
-out <- get_sim_data(Nlakes = 7, Nyears = 5, Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5, sig_varies = "ar1")
+out <- get_sim_data(Nlakes = 7, Nyears = 5, Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5, sig_varies = "ar1")$dat
 ggplot(out, aes(ages, y_i)) +
   geom_point() +
   facet_wrap(~lake)
 
 out <- purrr::map_dfr(seq_len(5), function(x) {
-  get_sim_data(Nlakes = 7, sig_varies = "ar1")
+  get_sim_data(Nlakes = 7, sig_varies = "ar1")$dat
 }, .id = "sim_iter")
 ggplot(out, aes(ages, y_i)) +
   facet_grid(sim_iter ~ lake) +
@@ -118,10 +117,6 @@ fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
                     sig_varies = c("fixed", "by lake", "by time", "both", "ar1"),
                     sig_varies_fitted = c("fixed", "by lake", "by time", "both", "ar1"),
                     iter = NA) {
-  # browser()
-  #sig_varies <- "ar1"
-  #sig_varies_fitted <- "fixed"
-  #iter=1
   sig_varies <- match.arg(sig_varies)
 
   sim <- get_sim_data(
