@@ -179,7 +179,8 @@ fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
     map <- c(map, list(
       eps_omega_st = as.factor(matrix(NA, nrow = mesh$n, ncol = Nyears)),
       ln_kappa = factor(NA),
-      rho_unscaled = factor(NA)
+      rho_unscaled = factor(NA),
+      ln_tau_O = factor(NA)
     ))
   }
 
