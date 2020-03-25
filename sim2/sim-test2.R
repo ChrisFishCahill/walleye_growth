@@ -116,8 +116,15 @@ fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
                     rho = 0.5, kappa = 0.5,
                     sig_varies = c("fixed", "by lake", "by time", "both", "ar1"),
                     sig_varies_fitted = c("fixed", "by lake", "by time", "both", "ar1"),
-                    iter = NA) {
+                    iter = NA, silent = TRUE) {
   sig_varies <- match.arg(sig_varies)
+  cat(
+    crayon::green(
+      clisymbols::symbol$tick
+    ),
+    "sim = ", sig_varies, "; fitted = ", sig_varies, "; iter = ", iter, "\n",
+    sep = ""
+  )
 
   sim <- get_sim_data(
     Nyears = Nyears, Nlakes = Nlakes, Nfish = Nfish,
@@ -184,15 +191,26 @@ fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
     ))
   }
 
-  sink(tempfile())
+  if (silent) {
+    sink(tempfile())
+    on.exit(sink())
+  }
   dyn.load(dynlib("sim2/vb_cyoa"))
   obj <- TMB::MakeADFun(data, parameters,
     DLL = "vb_cyoa",
     random = c("eps_omega_lake", "eps_omega_time", "eps_omega_st", "eps_linf", "eps_t0"),
     map = map,
     silent = TRUE
+    silent = silent
   )
-  opt <- nlminb(obj$par, obj$fn, obj$gr)
+  opt <- tryCatch(
+    {
+      nlminb(obj$par, obj$fn, obj$gr)
+    },
+    error = function(e) {
+      list(par = list(ln_global_omega = NA))
+    }
+  )
   dyn.unload(dynlib("sim2/vb_cyoa"))
   sink()
   tibble::tibble(
@@ -204,16 +222,28 @@ fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
   )
 }
 
+totest <- dplyr::tibble(
+  iter = 1L,
+  sig_varies = c("by lake", "by time", "both", "ar1"),
+  sig_varies_fitted = c("by lake", "by time", "both", "ar1")
+)
+purrr::pmap_dfr(totest, fit_sim, silent = TRUE) # testing
+
 totest <- tidyr::expand_grid(
-  iter = seq_len(10L),
+  iter = 1L,
   sig_varies = c("by lake", "by time", "both", "ar1"),
   sig_varies_fitted = c("by lake", "by time", "both", "ar1")
 )
 nrow(totest)
+system.time({
+  purrr::pmap_dfr(totest, fit_sim, silent = TRUE) # testing
+})
 
-set.seed(1234)
-out <- purrr::pmap_dfr(totest, fit_sim) # for testing
-
+totest <- tidyr::expand_grid(
+  iter = 25L,
+  sig_varies = c("by lake", "by time", "both", "ar1"),
+  sig_varies_fitted = c("by lake", "by time", "both", "ar1")
+)
 system.time({
   out <- furrr::future_pmap_dfr(totest, fit_sim)
 })
