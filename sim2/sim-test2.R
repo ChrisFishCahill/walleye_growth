@@ -254,7 +254,7 @@ system.time({
 })
 
 totest <- tidyr::expand_grid(
-  iter = 25L,
+  iter = seq_len(25L),
   sig_varies = c("by lake", "by time", "both", "ar1"),
   sig_varies_fitted = c("by lake", "by time", "both", "ar1")
 )
