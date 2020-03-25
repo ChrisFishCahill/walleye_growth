@@ -139,7 +139,7 @@ fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
     crayon::green(
       clisymbols::symbol$tick
     ),
-    "sim = ", sig_varies, "; fitted = ", sig_varies, "; iter = ", iter, "\n",
+    " sim = ", sig_varies, "; fitted = ", sig_varies, "; iter = ", iter, "\n",
     sep = ""
   )
 
