@@ -7,7 +7,7 @@ library(INLA)
 library(purrr)
 source("sim2/INLA_helpers.R")
 
-plan(multisession, workers = future::availableCores() / 2)
+#plan(multisession, workers = future::availableCores() / 2)
 
 get_sim_data <- function(Nyears = 10, Nlakes = 12, Nfish = 25,
                          Linf = 55, T0 = -1, SigO = 0.8, cv = 0.2, omega_global = 14,
@@ -41,7 +41,7 @@ get_sim_data <- function(Nyears = 10, Nlakes = 12, Nfish = 25,
     )
     omega_dev_st <- omega_dev_k[1:Nlakes, 1:Nyears]
     for (j in 2:Nyears) {
-      omega_dev_st[, j] <- rho * omega_dev_st[, j - 1] + sqrt(1 - rho^2) * omega_dev_st[, j]
+      omega_dev_st[, j] <- rho * omega_dev_st[, j - 1] + sqrt(1 - rho^2) * omega_dev_k[, j]
     }
   }
 
@@ -88,36 +88,54 @@ ggplot(out, aes(ages, y_i)) +
 
 out <- get_sim_data(Nlakes = 50, Nyears = 7, Nfish = 100, cv = 0.01, rho = 0.5, kappa=0.5, sig_varies = "ar1")
 
-# ggplot(out, aes(ages, y_i)) +
-#  facet_grid(year ~ lake) +
-#  geom_point(alpha = 0.2)
-
 ggplot(out, aes(x, y, col = omega_dev_st)) +
   geom_point() +
   facet_wrap(~year) +
   scale_color_gradient2()
 
+out <- get_sim_data(Nlakes = 7, Nyears = 5, Nfish = 100, cv = 0.01, rho = 0.5, kappa=0.5, sig_varies = "ar1")
+ggplot(out, aes(ages, y_i)) + geom_point() + facet_wrap(~lake)
+
+out <- purrr::map_dfr(seq_len(5), function(x) {
+  get_sim_data(Nlakes = 7, sig_varies = "ar1")
+}, .id = "sim_iter")
+ggplot(out, aes(ages, y_i)) +
+  facet_grid(sim_iter ~ lake) +
+  geom_point(alpha = 0.2)
+
 TMB::compile("sim2/vb_cyoa.cpp")
 
 fit_sim <- function(Nyears = 10, Nlakes = 10, Nfish = 20,
                     Linf = 55, T0 = -1, SigO = 0.8, cv = 0.2, omega_global = 14,
-                    sig_varies = c("fixed", "by lake", "by time", "both"),
+                    rho = 0.5, kappa = 0.5,
+                    sig_varies = c("fixed", "by lake", "by time", "both", "ar1"),
                     sig_varies_fitted = c("fixed", "by lake", "by time", "both", "ar1"),
                     iter = NA) {
+  browser()
+  sig_varies = "ar1"
   sig_varies <- match.arg(sig_varies)
 
   sim_dat <- get_sim_data(
     Nyears = Nyears, Nlakes = Nlakes, Nfish = Nfish,
     Linf = Linf, T0 = T0, SigO = SigO, cv = cv, omega_global = omega_global,
+    rho = rho, kappa = kappa,
     sig_varies = sig_varies
   )
+
+  Loc = unique(sim_dat[, c("x","y")])
+
+  mesh <- inla.mesh.create(Loc, refine = TRUE, extend = -0.5, cutoff = 0.01)
+  spde = inla.spde2.matern(mesh, alpha=2)
+  spdeMatrices = spde$param.inla[c("M0","M1","M2")]
+
   data <- list(
     Nobs = nrow(sim_dat),
     length_i = sim_dat$y_i,
     age_i = sim_dat$ages,
     lake_i = sim_dat$lake - 1L,
     time_i = sim_dat$year - 1L,
-    Nlakes = length(unique(sim_dat$lake))
+    Nlakes = length(unique(sim_dat$lake)),
+    spdeMatrices = spdeMatrices
   )
   parameters <- list(
     ln_global_linf = log(sim_dat$linf[1]),
@@ -131,7 +149,11 @@ fit_sim <- function(Nyears = 10, Nlakes = 10, Nfish = 20,
     eps_omega_time = rep(0, length(unique(sim_dat$year))),
     eps_linf = rep(0, data$Nlakes),
     eps_t0 = rep(0, data$Nlakes),
-    ln_cv = 0
+    eps_omega_st = matrix(0,  nrow=mesh$n,ncol=Nyears),
+    ln_cv = 0,
+    ln_kappa = 0,
+    ln_tau_O = 0,
+    rho = 0
   )
   map <- list(
     ln_sd_tzero = factor(NA),
@@ -143,13 +165,20 @@ fit_sim <- function(Nyears = 10, Nlakes = 10, Nfish = 20,
   if (sig_varies_fitted %in% c("fixed", "by lake")) {
     map <- c(map, list(
       eps_omega_time = as.factor(rep(NA, length(unique(sim_dat$year)))),
-      ln_sd_omega_time = factor(NA)
+      eps_omega_st = as.factor(matrix(NA,  nrow=mesh$n,ncol=Nyears)),
+      ln_sd_omega_time = factor(NA),
+      ln_kappa = factor(NA),
+      rho = factor(NA)
     ))
   }
   if (sig_varies_fitted %in% c("fixed", "by time")) {
     map <- c(map, list(
       eps_omega_lake = as.factor(rep(NA, length(unique(sim_dat$lake)))),
-      ln_sd_omega_lake = factor(NA)
+      ln_sd_omega_lake = factor(NA),
+      eps_omega_st = as.factor(matrix(NA,  nrow=mesh$n,ncol=Nyears)),
+      ln_sd_omega_time = factor(NA),
+      ln_kappa = factor(NA),
+      rho = factor(NA)
     ))
   }
 
@@ -172,6 +201,9 @@ fit_sim <- function(Nyears = 10, Nlakes = 10, Nfish = 20,
     iter = iter
   )
 }
+
+fit_sim()
+
 
 totest <- tidyr::expand_grid(
   iter = seq_len(200L),
