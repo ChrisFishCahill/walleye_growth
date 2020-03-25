@@ -1,5 +1,5 @@
-#TODO--convergence checks?
-#TODO--fixed estimation does not work
+# TODO--convergence checks?
+# TODO--fixed estimation does not work
 library(ggplot2)
 theme_set(theme_light())
 library(TMB)
@@ -9,7 +9,7 @@ library(INLA)
 library(purrr)
 source("sim2/INLA_helpers.R")
 
-plan(multisession, workers = future::availableCores()/2)
+plan(multisession, workers = future::availableCores() / 2)
 
 get_sim_data <- function(Nyears = 10, Nlakes = 12, Nfish = 25,
                          Linf = 55, T0 = -1, SigO = 0.8, cv = 0.2, omega_global = 14,
@@ -51,7 +51,7 @@ get_sim_data <- function(Nyears = 10, Nlakes = 12, Nfish = 25,
   out <- purrr::map2_dfr(to_sim$lake, to_sim$year, function(lake, year) {
     ages <- sample(0:25, Nfish, replace = TRUE)
     eta_it <- exp(log(omega_global) + omega_dev_time[year] +
-        omega_dev_lake[lake] + omega_dev_st[lake, year])
+      omega_dev_lake[lake] + omega_dev_st[lake, year])
     lpreds <- Linf * (1 - exp(-(eta_it / Linf) * (ages - T0)))
     which_x <- Loc[lake, 1]
     which_y <- Loc[lake, 2]
@@ -75,29 +75,46 @@ ggplot(out, aes(ages, y_i)) +
   facet_grid(sim_iter ~ lake) +
   geom_point(alpha = 0.2)
 
-out <- get_sim_data(Nlakes = 5, Nyears = 7, Nfish = 100, cv = 0.01, sig_varies = "by time")$dat
+out <- get_sim_data(
+  Nlakes = 5, Nyears = 7,
+  Nfish = 100, cv = 0.01, sig_varies = "by time"
+)$dat
 ggplot(out, aes(ages, y_i)) +
   facet_grid(year ~ lake) +
   geom_point(alpha = 0.2)
 
-out <- get_sim_data(Nlakes = 5, Nyears = 7, Nfish = 100, cv = 0.01, sig_varies = "by lake")$dat
+out <- get_sim_data(
+  Nlakes = 5, Nyears = 7,
+  Nfish = 100, cv = 0.01, sig_varies = "by lake"
+)$dat
 ggplot(out, aes(ages, y_i)) +
   facet_grid(year ~ lake) +
   geom_point(alpha = 0.2)
 
-out <- get_sim_data(Nlakes = 5, Nyears = 7, Nfish = 100, cv = 0.01, sig_varies = "both")$dat
+out <- get_sim_data(
+  Nlakes = 5, Nyears = 7,
+  Nfish = 100, cv = 0.01, sig_varies = "both"
+)$dat
 ggplot(out, aes(ages, y_i)) +
   facet_grid(year ~ lake) +
   geom_point(alpha = 0.2)
 
-out <- get_sim_data(Nlakes = 50, Nyears = 7, Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5, sig_varies = "ar1")$dat
+out <- get_sim_data(
+  Nlakes = 50, Nyears = 7,
+  Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5,
+  sig_varies = "ar1"
+)$dat
 
 ggplot(out, aes(x, y, col = omega_dev_st)) +
   geom_point() +
   facet_wrap(~year) +
   scale_color_gradient2()
 
-out <- get_sim_data(Nlakes = 7, Nyears = 5, Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5, sig_varies = "ar1")$dat
+out <- get_sim_data(
+  Nlakes = 7, Nyears = 5,
+  Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5,
+  sig_varies = "ar1"
+)$dat
 ggplot(out, aes(ages, y_i)) +
   geom_point() +
   facet_wrap(~lake)
@@ -200,7 +217,6 @@ fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
     DLL = "vb_cyoa",
     random = c("eps_omega_lake", "eps_omega_time", "eps_omega_st", "eps_linf", "eps_t0"),
     map = map,
-    silent = TRUE
     silent = silent
   )
   opt <- tryCatch(
@@ -212,7 +228,6 @@ fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
     }
   )
   dyn.unload(dynlib("sim2/vb_cyoa"))
-  sink()
   tibble::tibble(
     sig_varies = sig_varies,
     sig_varies_fitted = sig_varies_fitted,
