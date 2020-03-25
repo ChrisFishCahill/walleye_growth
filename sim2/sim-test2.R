@@ -188,7 +188,7 @@ fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
     ))
   }
 
-  #sink(tempfile())
+  sink(tempfile())
   dyn.load(dynlib("sim2/vb_cyoa"))
   obj <- TMB::MakeADFun(data, parameters,
     DLL = "vb_cyoa",
@@ -198,7 +198,7 @@ fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
   )
   opt <- nlminb(obj$par, obj$fn, obj$gr)
   dyn.unload(dynlib("sim2/vb_cyoa"))
-  #sink()
+  sink()
   tibble::tibble(
     sig_varies = sig_varies,
     sig_varies_fitted = sig_varies_fitted,
