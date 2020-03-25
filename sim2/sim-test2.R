@@ -18,7 +18,7 @@ get_sim_data <- function(Nyears = 10, Nlakes = 12, Nfish = 25,
   sig_varies <- match.arg(sig_varies)
   omega_dev_st <- matrix(0, nrow = Nlakes, ncol = Nyears) # omega_dev_st all zero unless "ar1" selected
   Loc <- cbind("x" = runif(Nlakes, min = 0, max = 10), "y" = runif(Nlakes, min = 0, max = 10))
-  mesh <- inla.mesh.create(Loc, refine = TRUE, extend = -0.5, cutoff = 0.01)
+  mesh <- INLA::inla.mesh.create(Loc, refine = TRUE, extend = -0.5, cutoff = 0.01)
   if (sig_varies == "fixed") {
     omega_dev_lake <- rnorm(Nlakes, 0, 0)
     omega_dev_time <- rnorm(Nyears, 0, 0)
@@ -151,7 +151,7 @@ fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
   )
   sim_dat <- sim$dat
   mesh <- sim$mesh
-  spde <- inla.spde2.matern(mesh, alpha = 2)
+  spde <- INLA::inla.spde2.matern(mesh, alpha = 2)
   spdeMatrices <- spde$param.inla[c("M0", "M1", "M2")]
 
   data <- list(
