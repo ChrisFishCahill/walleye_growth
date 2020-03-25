@@ -249,7 +249,6 @@ totest <- tidyr::expand_grid(
   sig_varies = c("by lake", "by time", "both", "ar1"),
   sig_varies_fitted = c("by lake", "by time", "both", "ar1")
 )
-nrow(totest)
 system.time({
   purrr::pmap_dfr(totest, fit_sim, silent = TRUE) # testing
 })
@@ -259,6 +258,7 @@ totest <- tidyr::expand_grid(
   sig_varies = c("by lake", "by time", "both", "ar1"),
   sig_varies_fitted = c("by lake", "by time", "both", "ar1")
 )
+nrow(totest)
 system.time({
   out <- furrr::future_pmap_dfr(totest, fit_sim)
 })
