@@ -1,7 +1,6 @@
 #include <TMB.hpp>
 /*
  * Choose your own correlation adventure for the von Bertalanffy
- *
 */
 
 template <class Type>
@@ -63,7 +62,10 @@ Type objective_function<Type>::operator()()
   // Spatial-temporal terms
   PARAMETER(ln_kappa);       //matern kappa
   PARAMETER(ln_tau_O);       //spatial noise
-  PARAMETER(rho);            //autocorrelation term
+  PARAMETER( rho_unscaled ); //autocorrelation term
+
+  // back-transform rho
+  Type rho = Type(2)*invlogit(rho_unscaled)-Type(1);
 
   vector<Type> length_pred(Nobs);
   Type jnll = 0;
