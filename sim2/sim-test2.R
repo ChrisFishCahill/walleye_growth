@@ -1,4 +1,3 @@
-# TODO--convergence checks?
 # TODO--fixed estimation does not work
 library(ggplot2)
 theme_set(theme_light())
@@ -9,8 +8,8 @@ library(INLA)
 library(purrr)
 source("sim2/INLA_helpers.R")
 
-# plan(multisession, workers = future::availableCores() / 2)
-plan(multisession, workers = future::availableCores() - 2) # faster on cahill's desktop
+# plan(multisession, workers = future::availableCores() / 2) #faster on seans machine
+plan(multisession, workers = future::availableCores() - 2) # faster on my desktop
 
 get_sim_data <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
                          Linf = 55, T0 = -1, SigO = 0.8, cv = 0.2, omega_global = 14,
@@ -69,63 +68,63 @@ get_sim_data <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
   list(dat = out, mesh = mesh)
 }
 
-# out <- purrr::map_dfr(seq_len(5), function(x) {
-#   get_sim_data(Nlakes = 5, sig_varies = "by lake")$dat
-# }, .id = "sim_iter")
-# ggplot(out, aes(ages, y_i)) +
-#   facet_grid(sim_iter ~ lake) +
-#   geom_point(alpha = 0.2)
-#
-# out <- get_sim_data(
-#   Nlakes = 5, Nyears = 7,
-#   Nfish = 100, cv = 0.01, sig_varies = "by time"
-# )$dat
-# ggplot(out, aes(ages, y_i)) +
-#   facet_grid(year ~ lake) +
-#   geom_point(alpha = 0.2)
-#
-# out <- get_sim_data(
-#   Nlakes = 5, Nyears = 7,
-#   Nfish = 100, cv = 0.01, sig_varies = "by lake"
-# )$dat
-# ggplot(out, aes(ages, y_i)) +
-#   facet_grid(year ~ lake) +
-#   geom_point(alpha = 0.2)
-#
-# out <- get_sim_data(
-#   Nlakes = 5, Nyears = 7,
-#   Nfish = 100, cv = 0.01, sig_varies = "both"
-# )$dat
-# ggplot(out, aes(ages, y_i)) +
-#   facet_grid(year ~ lake) +
-#   geom_point(alpha = 0.2)
-#
-# out <- get_sim_data(
-#   Nlakes = 50, Nyears = 7,
-#   Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5,
-#   sig_varies = "ar1"
-# )$dat
-#
-# ggplot(out, aes(x, y, col = omega_dev_st)) +
-#   geom_point() +
-#   facet_wrap(~year) +
-#   scale_color_gradient2()
-#
-# out <- get_sim_data(
-#   Nlakes = 7, Nyears = 5,
-#   Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5,
-#   sig_varies = "ar1"
-# )$dat
-# ggplot(out, aes(ages, y_i)) +
-#   geom_point() +
-#   facet_wrap(~lake)
-#
-# out <- purrr::map_dfr(seq_len(5), function(x) {
-#   get_sim_data(Nlakes = 7, sig_varies = "ar1")$dat
-# }, .id = "sim_iter")
-# ggplot(out, aes(ages, y_i)) +
-#   facet_grid(sim_iter ~ lake) +
-#   geom_point(alpha = 0.2)
+out <- purrr::map_dfr(seq_len(5), function(x) {
+  get_sim_data(Nlakes = 5, sig_varies = "by lake")$dat
+}, .id = "sim_iter")
+ggplot(out, aes(ages, y_i)) +
+  facet_grid(sim_iter ~ lake) +
+  geom_point(alpha = 0.2)
+
+out <- get_sim_data(
+  Nlakes = 5, Nyears = 7,
+  Nfish = 100, cv = 0.01, sig_varies = "by time"
+)$dat
+ggplot(out, aes(ages, y_i)) +
+  facet_grid(year ~ lake) +
+  geom_point(alpha = 0.2)
+
+out <- get_sim_data(
+  Nlakes = 5, Nyears = 7,
+  Nfish = 100, cv = 0.01, sig_varies = "by lake"
+)$dat
+ggplot(out, aes(ages, y_i)) +
+  facet_grid(year ~ lake) +
+  geom_point(alpha = 0.2)
+
+out <- get_sim_data(
+  Nlakes = 5, Nyears = 7,
+  Nfish = 100, cv = 0.01, sig_varies = "both"
+)$dat
+ggplot(out, aes(ages, y_i)) +
+  facet_grid(year ~ lake) +
+  geom_point(alpha = 0.2)
+
+out <- get_sim_data(
+  Nlakes = 50, Nyears = 7,
+  Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5,
+  sig_varies = "ar1"
+)$dat
+
+ggplot(out, aes(x, y, col = omega_dev_st)) +
+  geom_point() +
+  facet_wrap(~year) +
+  scale_color_gradient2()
+
+out <- get_sim_data(
+  Nlakes = 7, Nyears = 5,
+  Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5,
+  sig_varies = "ar1"
+)$dat
+ggplot(out, aes(ages, y_i)) +
+  geom_point() +
+  facet_wrap(~lake)
+
+out <- purrr::map_dfr(seq_len(5), function(x) {
+  get_sim_data(Nlakes = 7, sig_varies = "ar1")$dat
+}, .id = "sim_iter")
+ggplot(out, aes(ages, y_i)) +
+  facet_grid(sim_iter ~ lake) +
+  geom_point(alpha = 0.2)
 
 TMB::compile("sim2/vb_cyoa.cpp")
 
@@ -228,22 +227,20 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
       list(par = list(ln_global_omega = NA))
     }
   )
-  convergence <- 1L
   if (!is.na(opt$par[["ln_global_omega"]])) {
     sd_report <- TMB::sdreport(obj)
-  } else {
-    convergence <- 0L
+    if (any(sd_report$gradient.fixed > 0.01) | !sd_report$pdHess) {
+      opt$par[["ln_global_omega"]] <- NA
+    }
   }
-  if (any(sd_report$gradient.fixed > 0.01) | !sd_report$pdHess) {
-    convergence <- 0L
-  }
+
   dyn.unload(dynlib("sim2/vb_cyoa"))
   tibble::tibble(
     sig_varies = sig_varies,
     sig_varies_fitted = sig_varies_fitted,
     ln_global_omega = opt$par[["ln_global_omega"]],
     true_ln_global_omega = log(sim_dat$omega_global[1]),
-    iter = iter, convergence = convergence
+    iter = iter
   )
 }
 
@@ -254,18 +251,8 @@ totest <- dplyr::tibble(
 )
 purrr::pmap_dfr(totest, fit_sim, silent = TRUE) # testing
 
-#
-# totest <- tidyr::expand_grid(
-#   iter = 1L,
-#   sig_varies = c("by lake", "by time", "both", "ar1"),
-#   sig_varies_fitted = c("by lake", "by time", "both", "ar1")
-# )
-# system.time({
-#   out <- purrr::pmap_dfr(totest, fit_sim, silent = TRUE) # testing
-# })
-
 totest <- tidyr::expand_grid(
-  iter = seq_len(20L),
+  iter = seq_len(100L),
   sig_varies = c("by lake", "by time", "both", "ar1"),
   sig_varies_fitted = c("by lake", "by time", "both", "ar1")
 )
