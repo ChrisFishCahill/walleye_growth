@@ -60,9 +60,9 @@ Type objective_function<Type>::operator()()
   PARAMETER(ln_cv);
 
   // Spatial-temporal terms
-  PARAMETER(ln_kappa);       //matern kappa
-  PARAMETER(ln_tau_O);       //spatial noise
-  PARAMETER( rho_unscaled ); //autocorrelation term
+  PARAMETER(ln_kappa);     //matern kappa
+  PARAMETER(ln_tau_O);     //spatial noise
+  PARAMETER(rho_unscaled); //autocorrelation term
 
   // back-transform rho
   Type rho = Type(2)*invlogit(rho_unscaled)-Type(1);
@@ -87,10 +87,10 @@ Type objective_function<Type>::operator()()
   Type SigO = 1 / sqrt(4 * M_PI * exp(2*ln_tau_O) * exp(2*ln_kappa));
 
   for (int i = 0; i < Nobs; i++) {
-    Type omega = exp(ln_global_omega +               // intercept
-                     eps_omega_lake(lake_i(i)) +     // std lake ran eff
-                     eps_omega_time(time_i(i)) +     // std time ran eff
-                     eps_omega_st(lake_i(i), time_i(i)));  // ar1 space time
+    Type omega = exp(ln_global_omega +                    // intercept
+                     eps_omega_lake(lake_i(i)) +          // std lake ran eff
+                     eps_omega_time(time_i(i)) +          // std time ran eff
+                     eps_omega_st(lake_i(i), time_i(i))); // ar1 space time
 
     Type linf = exp(ln_global_linf +       // intercept
                     eps_linf(lake_i(i)));  // std ran eff
