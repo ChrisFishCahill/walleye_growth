@@ -184,13 +184,13 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
     eps_linf = as.factor(rep(NA, data$Nlakes)),
     eps_t0 = as.factor(rep(NA, data$Nlakes))
   )
-  if (sig_varies_fitted %in% c("fixed", "by lake")) {
+  if (sig_varies_fitted %in% c("fixed", "by lake", "ar1")) {
     map <- c(map, list(
       eps_omega_time = as.factor(rep(NA, length(unique(sim_dat$year)))),
       ln_sd_omega_time = factor(NA)
     ))
   }
-  if (sig_varies_fitted %in% c("fixed", "by time")) {
+  if (sig_varies_fitted %in% c("fixed", "by time", "ar1")) {
     map <- c(map, list(
       eps_omega_lake = as.factor(rep(NA, length(unique(sim_dat$lake)))),
       ln_sd_omega_lake = factor(NA)
@@ -218,13 +218,14 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
   )
   opt <- tryCatch(
     {
-      nlminb(obj$par, obj$fn, obj$gr, eval.max = 400, iter.max = 300)
+      nlminb(obj$par, obj$fn, obj$gr, eval.max = 1000, iter.max = 500)
     },
     error = function(e) {
       list(par = list(ln_global_omega = NA))
     }
   )
-  if (!opt$convergence == 0) {
+  if (opt$convergence != 0) {
+    browser()
     opt$par[["ln_global_omega"]] <- NA
   }
 
@@ -243,7 +244,8 @@ totest <- dplyr::tibble(
   sig_varies = c("by lake", "by time", "both", "ar1"),
   sig_varies_fitted = c("by lake", "by time", "both", "ar1")
 )
-purrr::pmap_dfr(totest, fit_sim, silent = TRUE) # testing
+
+purrr::pmap_dfr(totest, fit_sim, silent = F) # testing
 
 set.seed(14)
 totest <- tidyr::expand_grid(
@@ -252,6 +254,7 @@ totest <- tidyr::expand_grid(
   sig_varies_fitted = c("by lake", "by time", "both", "ar1")
 )
 nrow(totest)
+purrr::pmap_dfr(totest, fit_sim, silent = F) # testing
 
 system.time({
   out <- furrr::future_pmap_dfr(totest, fit_sim)
