@@ -1,4 +1,3 @@
-# TODO--fixed estimation does not work
 library(ggplot2)
 theme_set(theme_light())
 library(TMB)
@@ -8,15 +7,14 @@ library(INLA)
 library(purrr)
 source("sim2/INLA_helpers.R")
 
-# plan(multisession, workers = future::availableCores() / 2) #faster on seans machine
-plan(multisession, workers = future::availableCores() - 2) # faster on my desktop
+plan(multisession, workers = future::availableCores() / 2)
 
 get_sim_data <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
                          Linf = 55, T0 = -1, SigO = 0.8, cv = 0.2, omega_global = 14,
                          rho = 0.5, kappa = 0.5,
                          sig_varies = c("fixed", "by lake", "by time", "both", "ar1")) {
   sig_varies <- match.arg(sig_varies)
-  omega_dev_st <- matrix(0, nrow = Nlakes, ncol = Nyears) # omega_dev_st all zero unless "ar1" selected
+  omega_dev_st <- matrix(0, nrow = Nlakes, ncol = Nyears)
   Loc <- cbind("x" = runif(Nlakes, min = 0, max = 10), "y" = runif(Nlakes, min = 0, max = 10))
   mesh <- INLA::inla.mesh.create(Loc, refine = TRUE, extend = -0.5, cutoff = 0.01)
   if (sig_varies == "fixed") {
@@ -32,7 +30,6 @@ get_sim_data <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
     omega_dev_lake <- rnorm(Nlakes, 0, SigO)
     omega_dev_time <- rnorm(Nyears, 0, SigO)
   } else if (sig_varies == "ar1") {
-    # set lake and year devs off:
     omega_dev_lake <- rnorm(Nlakes, 0, 0)
     omega_dev_time <- rnorm(Nyears, 0, 0)
     # simulate space-time devs a la INLA/GMRFlib:
@@ -68,63 +65,63 @@ get_sim_data <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
   list(dat = out, mesh = mesh)
 }
 
-out <- purrr::map_dfr(seq_len(5), function(x) {
-  get_sim_data(Nlakes = 5, sig_varies = "by lake")$dat
-}, .id = "sim_iter")
-ggplot(out, aes(ages, y_i)) +
-  facet_grid(sim_iter ~ lake) +
-  geom_point(alpha = 0.2)
-
-out <- get_sim_data(
-  Nlakes = 5, Nyears = 7,
-  Nfish = 100, cv = 0.01, sig_varies = "by time"
-)$dat
-ggplot(out, aes(ages, y_i)) +
-  facet_grid(year ~ lake) +
-  geom_point(alpha = 0.2)
-
-out <- get_sim_data(
-  Nlakes = 5, Nyears = 7,
-  Nfish = 100, cv = 0.01, sig_varies = "by lake"
-)$dat
-ggplot(out, aes(ages, y_i)) +
-  facet_grid(year ~ lake) +
-  geom_point(alpha = 0.2)
-
-out <- get_sim_data(
-  Nlakes = 5, Nyears = 7,
-  Nfish = 100, cv = 0.01, sig_varies = "both"
-)$dat
-ggplot(out, aes(ages, y_i)) +
-  facet_grid(year ~ lake) +
-  geom_point(alpha = 0.2)
-
-out <- get_sim_data(
-  Nlakes = 50, Nyears = 7,
-  Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5,
-  sig_varies = "ar1"
-)$dat
-
-ggplot(out, aes(x, y, col = omega_dev_st)) +
-  geom_point() +
-  facet_wrap(~year) +
-  scale_color_gradient2()
-
-out <- get_sim_data(
-  Nlakes = 7, Nyears = 5,
-  Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5,
-  sig_varies = "ar1"
-)$dat
-ggplot(out, aes(ages, y_i)) +
-  geom_point() +
-  facet_wrap(~lake)
-
-out <- purrr::map_dfr(seq_len(5), function(x) {
-  get_sim_data(Nlakes = 7, sig_varies = "ar1")$dat
-}, .id = "sim_iter")
-ggplot(out, aes(ages, y_i)) +
-  facet_grid(sim_iter ~ lake) +
-  geom_point(alpha = 0.2)
+# out <- purrr::map_dfr(seq_len(5), function(x) {
+#   get_sim_data(Nlakes = 5, sig_varies = "by lake")$dat
+# }, .id = "sim_iter")
+# ggplot(out, aes(ages, y_i)) +
+#   facet_grid(sim_iter ~ lake) +
+#   geom_point(alpha = 0.2)
+#
+# out <- get_sim_data(
+#   Nlakes = 5, Nyears = 7,
+#   Nfish = 100, cv = 0.01, sig_varies = "by time"
+# )$dat
+# ggplot(out, aes(ages, y_i)) +
+#   facet_grid(year ~ lake) +
+#   geom_point(alpha = 0.2)
+#
+# out <- get_sim_data(
+#   Nlakes = 5, Nyears = 7,
+#   Nfish = 100, cv = 0.01, sig_varies = "by lake"
+# )$dat
+# ggplot(out, aes(ages, y_i)) +
+#   facet_grid(year ~ lake) +
+#   geom_point(alpha = 0.2)
+#
+# out <- get_sim_data(
+#   Nlakes = 5, Nyears = 7,
+#   Nfish = 100, cv = 0.01, sig_varies = "both"
+# )$dat
+# ggplot(out, aes(ages, y_i)) +
+#   facet_grid(year ~ lake) +
+#   geom_point(alpha = 0.2)
+#
+# out <- get_sim_data(
+#   Nlakes = 50, Nyears = 7,
+#   Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5,
+#   sig_varies = "ar1"
+# )$dat
+#
+# ggplot(out, aes(x, y, col = omega_dev_st)) +
+#   geom_point() +
+#   facet_wrap(~year) +
+#   scale_color_gradient2()
+#
+# out <- get_sim_data(
+#   Nlakes = 7, Nyears = 5,
+#   Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5,
+#   sig_varies = "ar1"
+# )$dat
+# ggplot(out, aes(ages, y_i)) +
+#   geom_point() +
+#   facet_wrap(~lake)
+#
+# out <- purrr::map_dfr(seq_len(5), function(x) {
+#   get_sim_data(Nlakes = 7, sig_varies = "ar1")$dat
+# }, .id = "sim_iter")
+# ggplot(out, aes(ages, y_i)) +
+#   facet_grid(sim_iter ~ lake) +
+#   geom_point(alpha = 0.2)
 
 TMB::compile("sim2/vb_cyoa.cpp")
 
@@ -227,11 +224,8 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
       list(par = list(ln_global_omega = NA))
     }
   )
-  if (!is.na(opt$par[["ln_global_omega"]])) {
-    sd_report <- TMB::sdreport(obj)
-    if (any(sd_report$gradient.fixed > 0.01) | !sd_report$pdHess) {
-      opt$par[["ln_global_omega"]] <- NA
-    }
+  if (!opt$convergence == 0) {
+    opt$par[["ln_global_omega"]] <- NA
   }
 
   dyn.unload(dynlib("sim2/vb_cyoa"))
@@ -251,8 +245,9 @@ totest <- dplyr::tibble(
 )
 purrr::pmap_dfr(totest, fit_sim, silent = TRUE) # testing
 
+set.seed(14)
 totest <- tidyr::expand_grid(
-  iter = seq_len(100L),
+  iter = seq_len(200L),
   sig_varies = c("by lake", "by time", "both", "ar1"),
   sig_varies_fitted = c("by lake", "by time", "both", "ar1")
 )
@@ -261,6 +256,8 @@ nrow(totest)
 system.time({
   out <- furrr::future_pmap_dfr(totest, fit_sim)
 })
+
+print(out[which(is.na(out$ln_global_omega)),], n=Inf) #which failed?
 
 saveRDS(out, file = "sim2/sim2.rds")
 out <- readRDS("sim2/sim2.rds")
@@ -277,9 +274,9 @@ ggsave("sim2/hist-sim.pdf", width = 7, height = 5)
 
 out %>%
   dplyr::mutate(Matched = ifelse(sig_varies_fitted == sig_varies, TRUE, FALSE)) %>%
-  ggplot(aes(sig_varies, exp(ln_global_omega), colour = sig_varies_fitted, fill = Matched)) +
+  ggplot(aes(sig_varies, ln_global_omega, colour = sig_varies_fitted, fill = Matched)) +
   geom_boxplot() +
-  geom_hline(yintercept = exp(out[["true_ln_global_omega"]][1])) +
+  geom_hline(yintercept = out[["true_ln_global_omega"]][1]) +
   xlab(expression(Simulated ~ omega ~ variation)) +
   labs(colour = expression(Fitted ~ omega ~ variation)) +
   scale_color_brewer(palette = "Dark2") +
