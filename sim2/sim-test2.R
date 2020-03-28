@@ -9,7 +9,7 @@ source("sim2/INLA_helpers.R")
 
 plan(multisession, workers = future::availableCores() / 2)
 
-get_sim_data <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
+get_sim_data <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
                          Linf = 55, T0 = -1, SigO = 0.8, cv = 0.2, omega_global = 14,
                          rho = 0.5, kappa = 0.5,
                          sig_varies = c("fixed", "by lake", "by time", "both", "ar1")) {
@@ -125,7 +125,7 @@ get_sim_data <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
 
 TMB::compile("sim2/vb_cyoa.cpp")
 
-fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
+fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
                     Linf = 55, T0 = -1, SigO = 0.8, cv = 0.2, omega_global = 14,
                     rho = 0.5, kappa = 0.5,
                     sig_varies = c("fixed", "by lake", "by time", "both", "ar1"),
@@ -136,7 +136,7 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
     crayon::green(
       clisymbols::symbol$tick
     ),
-    " sim = ", sig_varies, "; fitted = ", sig_varies, "; iter = ", iter, "\n",
+    " sim = ", sig_varies, "; fitted = ", sig_varies_fitted, "; iter = ", iter, "\n",
     sep = ""
   )
 
@@ -224,9 +224,10 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
       list(par = list(ln_global_omega = NA))
     }
   )
-  if (opt$convergence != 0) {
-    browser()
-    opt$par[["ln_global_omega"]] <- NA
+  converge=1L
+  if (is.na(opt$par[["ln_global_omega"]]) || opt$convergence != 0) {
+    converge=0L
+    #opt$par[["ln_global_omega"]] <- NA
   }
 
   dyn.unload(dynlib("sim2/vb_cyoa"))
@@ -235,17 +236,29 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
     sig_varies_fitted = sig_varies_fitted,
     ln_global_omega = opt$par[["ln_global_omega"]],
     true_ln_global_omega = log(sim_dat$omega_global[1]),
-    iter = iter
+    iter = iter, converge=converge
   )
 }
 
-totest <- dplyr::tibble(
-  iter = 1L,
-  sig_varies = c("by lake", "by time", "both", "ar1"),
-  sig_varies_fitted = c("by lake", "by time", "both", "ar1")
-)
+# totest <- dplyr::tibble(
+#   iter = 1L,
+#   sig_varies = c("by lake", "by time", "both", "ar1"),
+#   sig_varies_fitted = c("by lake", "by time", "both", "ar1")
+# )
+#
+#purrr::pmap_dfr(totest, fit_sim, silent = F) # testing
 
-purrr::pmap_dfr(totest, fit_sim, silent = F) # testing
+
+# totest <- tidyr::expand_grid(
+#   iter = seq_len(10L),
+#   sig_varies = c("by time", "both"),
+#   sig_varies_fitted = c("ar1")
+# )
+# out = purrr::pmap_dfr(totest, fit_sim, silent = F, Nyears = 15, Nfish=50, Nlakes=30, SigO= 0.1) # testing
+# out = purrr::pmap_dfr(totest, fit_sim, silent = F, Nyears = 10, Nfish=50, Nlakes=30, SigO= 0.1)
+# out = purrr::pmap_dfr(totest, fit_sim, silent = F, Nyears = 15, Nfish=30, Nlakes=30, SigO= 0.1)
+# out = purrr::pmap_dfr(totest, fit_sim, silent = F, Nyears = 15, Nfish=50, Nlakes=30, SigO= 0.1)
+
 
 set.seed(14)
 totest <- tidyr::expand_grid(
@@ -253,14 +266,19 @@ totest <- tidyr::expand_grid(
   sig_varies = c("by lake", "by time", "both", "ar1"),
   sig_varies_fitted = c("by lake", "by time", "both", "ar1")
 )
+
 nrow(totest)
-purrr::pmap_dfr(totest, fit_sim, silent = F) # testing
 
 system.time({
   out <- furrr::future_pmap_dfr(totest, fit_sim)
 })
 
 print(out[which(is.na(out$ln_global_omega)),], n=Inf) #which failed?
+whichSims = out[which(is.na(out$ln_global_omega)),"iter"]
+whichSims = out[which(out$converge==0),"iter"]
+
+out = out %>% dplyr::filter(!out$iter %in% whichSims$iter)
+
 
 saveRDS(out, file = "sim2/sim2.rds")
 out <- readRDS("sim2/sim2.rds")
@@ -268,7 +286,7 @@ out %>%
   dplyr::mutate(sig_varies = paste0("Sim = ", sig_varies)) %>%
   dplyr::mutate(sig_varies_fitted = paste0("Fitted = ", sig_varies_fitted)) %>%
   ggplot(aes(ln_global_omega)) +
-  geom_histogram(bins = 25) +
+  geom_histogram(bins = 50) +
   geom_vline(xintercept = out[["true_ln_global_omega"]][1]) +
   facet_grid(sig_varies_fitted ~ sig_varies) +
   xlab(expression(omega)) +
@@ -277,11 +295,11 @@ ggsave("sim2/hist-sim.pdf", width = 7, height = 5)
 
 out %>%
   dplyr::mutate(Matched = ifelse(sig_varies_fitted == sig_varies, TRUE, FALSE)) %>%
-  ggplot(aes(sig_varies, ln_global_omega, colour = sig_varies_fitted, fill = Matched)) +
+  ggplot(aes(sig_varies, exp(ln_global_omega), colour = sig_varies_fitted, fill = Matched)) +
   geom_boxplot() +
-  geom_hline(yintercept = out[["true_ln_global_omega"]][1]) +
-  xlab(expression(Simulated ~ omega ~ variation)) +
-  labs(colour = expression(Fitted ~ omega ~ variation)) +
+  geom_hline(yintercept = exp(out[["true_ln_global_omega"]][1])) +
+  xlab(expression(Simulated~omega~variation)) +
+  labs(colour = expression(Fitted~omega~variation)) +
   scale_color_brewer(palette = "Dark2") +
   scale_fill_manual(values = c("white", "grey60")) +
   ylab(expression(omega[0]))
