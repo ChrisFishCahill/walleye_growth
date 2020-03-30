@@ -125,7 +125,7 @@ get_sim_data <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
 
 TMB::compile("sim2/vb_cyoa.cpp")
 
-fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
+fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
                     Linf = 55, T0 = -1, SigO = 0.8, cv = 0.2, omega_global = 14,
                     rho = 0.5, kappa = 0.5,
                     sig_varies = c("fixed", "by lake", "by time", "both", "ar1"),
@@ -161,11 +161,11 @@ fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
     spdeMatrices = spdeMatrices
   )
   parameters <- list(
-    ln_global_linf = log(sim_dat$linf[1]),
+    ln_global_linf = log(sim_dat$linf[1]) + rnorm(1, 0, 0.1),
     ln_sd_linf = 0,
-    global_tzero = sim_dat$t0[1],
+    global_tzero = sim_dat$t0[1] + rnorm(1, 0, 0.1),
     ln_sd_tzero = 0,
-    ln_global_omega = log(sim_dat$omega_global[1]),
+    ln_global_omega = log(sim_dat$omega_global[1]) + rnorm(1, 0, 0.1),
     ln_sd_omega_lake = 0,
     ln_sd_omega_time = 0,
     eps_omega_lake = rep(0, data$Nlakes),
@@ -173,10 +173,10 @@ fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
     eps_linf = rep(0, data$Nlakes),
     eps_t0 = rep(0, data$Nlakes),
     eps_omega_st = matrix(0, nrow = mesh$n, ncol = Nyears),
-    ln_cv = 0,
-    ln_kappa = log(kappa),
-    ln_tau_O = 0,
-    rho_unscaled = 2 * plogis(rho) - 1
+    ln_cv = log(cv) + rnorm(1, 0, 0.1),
+    ln_kappa = log(kappa) + rnorm(1, 0, 0.05),
+    ln_tau_O = log(SigO) + rnorm(1, 0, 0.1),
+    rho_unscaled = qlogis((rho + 1)/2) + rnorm(1, 0, 0.1)
   )
   map <- list(
     ln_sd_tzero = factor(NA),
