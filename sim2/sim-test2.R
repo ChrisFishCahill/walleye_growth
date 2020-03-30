@@ -221,22 +221,20 @@ fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
       nlminb(obj$par, obj$fn, obj$gr, eval.max = 1000, iter.max = 500)
     },
     error = function(e) {
-      list(par = list(ln_global_omega = NA))
+      list(par = list(ln_global_omega = NA, convergence = 1))
     }
   )
-  converge=1L
   if (is.na(opt$par[["ln_global_omega"]]) || opt$convergence != 0) {
-    converge=0L
-    #opt$par[["ln_global_omega"]] <- NA
+   opt$par[["ln_global_omega"]] <- NA
+   opt$convergence <- 1
   }
-
   dyn.unload(dynlib("sim2/vb_cyoa"))
   tibble::tibble(
     sig_varies = sig_varies,
     sig_varies_fitted = sig_varies_fitted,
     ln_global_omega = opt$par[["ln_global_omega"]],
     true_ln_global_omega = log(sim_dat$omega_global[1]),
-    iter = iter, converge=converge
+    iter = iter, convergence=opt$convergence
   )
 }
 
@@ -246,21 +244,17 @@ fit_sim <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
 #   sig_varies_fitted = c("by lake", "by time", "both", "ar1")
 # )
 #
-#purrr::pmap_dfr(totest, fit_sim, silent = F) # testing
-
 
 # totest <- tidyr::expand_grid(
-#   iter = seq_len(10L),
+#   iter = seq_len(100L),
 #   sig_varies = c("by time", "both"),
 #   sig_varies_fitted = c("ar1")
 # )
-# out = purrr::pmap_dfr(totest, fit_sim, silent = F, Nyears = 15, Nfish=50, Nlakes=30, SigO= 0.1) # testing
-# out = purrr::pmap_dfr(totest, fit_sim, silent = F, Nyears = 10, Nfish=50, Nlakes=30, SigO= 0.1)
-# out = purrr::pmap_dfr(totest, fit_sim, silent = F, Nyears = 15, Nfish=30, Nlakes=30, SigO= 0.1)
-# out = purrr::pmap_dfr(totest, fit_sim, silent = F, Nyears = 15, Nfish=50, Nlakes=30, SigO= 0.1)
+#
+# out = purrr::pmap_dfr(totest, fit_sim, silent = F, SigO = 0.5, rho=1) # testing
 
+set.seed(666)
 
-set.seed(14)
 totest <- tidyr::expand_grid(
   iter = seq_len(200L),
   sig_varies = c("by lake", "by time", "both", "ar1"),
@@ -270,19 +264,19 @@ totest <- tidyr::expand_grid(
 nrow(totest)
 
 system.time({
-  out <- furrr::future_pmap_dfr(totest, fit_sim)
+  out <- furrr::future_pmap_dfr(totest, fit_sim, SigO = 0.1)
 })
 
-print(out[which(is.na(out$ln_global_omega)),], n=Inf) #which failed?
-whichSims = out[which(is.na(out$ln_global_omega)),"iter"]
-whichSims = out[which(out$converge==0),"iter"]
+buggered = out %>% dplyr::filter(convergence==1)
+print(buggered, n=Inf) #which failed?
+whichSims = buggered$iter
 
-out = out %>% dplyr::filter(!out$iter %in% whichSims$iter)
-
+table(buggered$sig_varies) #where are the failures occuring.  primarily by lake / by time
 
 saveRDS(out, file = "sim2/sim2.rds")
 out <- readRDS("sim2/sim2.rds")
 out %>%
+  dplyr::filter(!(iter %in% whichSims)) %>%
   dplyr::mutate(sig_varies = paste0("Sim = ", sig_varies)) %>%
   dplyr::mutate(sig_varies_fitted = paste0("Fitted = ", sig_varies_fitted)) %>%
   ggplot(aes(ln_global_omega)) +
@@ -294,6 +288,7 @@ out %>%
 ggsave("sim2/hist-sim.pdf", width = 7, height = 5)
 
 out %>%
+  dplyr::filter(!(iter %in% whichSims)) %>%
   dplyr::mutate(Matched = ifelse(sig_varies_fitted == sig_varies, TRUE, FALSE)) %>%
   ggplot(aes(sig_varies, exp(ln_global_omega), colour = sig_varies_fitted, fill = Matched)) +
   geom_boxplot() +
