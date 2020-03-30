@@ -130,7 +130,9 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
                     rho = 0.5, kappa = 0.5,
                     sig_varies = c("fixed", "by lake", "by time", "both", "ar1"),
                     sig_varies_fitted = c("fixed", "by lake", "by time", "both", "ar1"),
-                    iter = NA, silent = TRUE) {
+                    iter = NA, silent = TRUE,
+                    rho_sd_prior = 50, rho_mean_prior = 0,
+                    tau_O_mean_prior = 0, tau_O_sd_prior = 3) {
   sig_varies <- match.arg(sig_varies)
   cat(
     crayon::green(
@@ -158,7 +160,11 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
     lake_i = sim_dat$lake - 1L,
     time_i = sim_dat$year - 1L,
     Nlakes = length(unique(sim_dat$lake)),
-    spdeMatrices = spdeMatrices
+    spdeMatrices = spdeMatrices,
+    rho_sd_prior = rho_sd_prior,
+    rho_mean_prior = rho_mean_prior,
+    tau_O_mean_prior = tau_O_mean_prior,
+    tau_O_sd_prior = tau_O_sd_prior
   )
   parameters <- list(
     ln_global_linf = log(sim_dat$linf[1]) + rnorm(1, 0, 0.1),
@@ -174,9 +180,9 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
     eps_t0 = rep(0, data$Nlakes),
     eps_omega_st = matrix(0, nrow = mesh$n, ncol = Nyears),
     ln_cv = log(cv) + rnorm(1, 0, 0.1),
-    ln_kappa = log(kappa) + rnorm(1, 0, 0.05),
-    ln_tau_O = log(SigO) + rnorm(1, 0, 0.1),
-    rho_unscaled = qlogis((rho + 1)/2) + rnorm(1, 0, 0.1)
+    ln_kappa = log(kappa) + rnorm(1, 0, 0.1),
+    ln_tau_O = log(SigO) + rnorm(1, 0, 0.1), # get close
+    rho_unscaled = qlogis((0 + 1) / 2) + rnorm(1, 0, 0.05)
   )
   map <- list(
     ln_sd_tzero = factor(NA),
@@ -224,17 +230,40 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
       list(par = list(ln_global_omega = NA, convergence = 1))
     }
   )
+
+  # If rho is stuck at 1, fix it and re-estimate:
+  rho_hat <- 2 * plogis(opt$par[["rho_unscaled"]]) - 1
+  if (opt$convergence != 0 && round(rho_hat, 2) == 1.0) {
+    map <- map$rho_unscaled <- factor(NA)
+    parameters$rho_unscaled <- qlogis((0.99 + 1) / 2)
+    obj <- TMB::MakeADFun(data, parameters,
+      DLL = "vb_cyoa",
+      random = c("eps_omega_lake", "eps_omega_time", "eps_omega_st", "eps_linf", "eps_t0"),
+      map = map,
+      silent = silent
+    )
+    opt <- tryCatch(
+      {
+        nlminb(obj$par, obj$fn, obj$gr, eval.max = 1000, iter.max = 500)
+      },
+      error = function(e) {
+        list(par = list(ln_global_omega = NA, convergence = 1))
+      }
+    )
+  }
   if (is.na(opt$par[["ln_global_omega"]]) || opt$convergence != 0) {
-   opt$par[["ln_global_omega"]] <- NA
-   opt$convergence <- 1
+    opt$par[["ln_global_omega"]] <- NA
+    opt$convergence <- 1
   }
   dyn.unload(dynlib("sim2/vb_cyoa"))
   tibble::tibble(
     sig_varies = sig_varies,
     sig_varies_fitted = sig_varies_fitted,
     ln_global_omega = opt$par[["ln_global_omega"]],
+    tau_O = if (sig_varies_fitted == "ar1") exp(opt$par[["ln_tau_O"]]) else NA,
+    rho = if (sig_varies_fitted == "ar1") 2 * plogis(opt$par[["rho_unscaled"]]) - 1 else NA,
     true_ln_global_omega = log(sim_dat$omega_global[1]),
-    iter = iter, convergence=opt$convergence
+    iter = iter, convergence = opt$convergence
   )
 }
 
@@ -263,15 +292,17 @@ totest <- tidyr::expand_grid(
 
 nrow(totest)
 
+# out <- pmap_dfr(totest, fit_sim, SigO = 0.4, silent = TRUE)
+
 system.time({
-  out <- furrr::future_pmap_dfr(totest, fit_sim, SigO = 0.1)
+  out <- furrr::future_pmap_dfr(totest, fit_sim, SigO = 0.5)
 })
 
-buggered = out %>% dplyr::filter(convergence==1)
-print(buggered, n=Inf) #which failed?
-whichSims = buggered$iter
+buggered <- out %>% dplyr::filter(convergence == 1)
+print(buggered, n = Inf) # which failed?
+whichSims <- buggered$iter
 
-table(buggered$sig_varies) #where are the failures occuring.  primarily by lake / by time
+table(buggered$sig_varies) # where are the failures occuring.  primarily by lake / by time
 
 saveRDS(out, file = "sim2/sim2.rds")
 out <- readRDS("sim2/sim2.rds")
