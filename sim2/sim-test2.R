@@ -12,7 +12,7 @@ plan(multisession, workers = future::availableCores() / 2)
 get_sim_data <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
                          Linf = 55, T0 = -1, SigO = 0.8, cv = 0.2, omega_global = 14,
                          rho = 0.5, kappa = 0.5,
-                         sig_varies = c("fixed", "by lake", "by time", "both", "SPDE_x_ar1")) {
+                         sig_varies = c("fixed", "by lake", "by time", "both", "ar1 st")) {
   sig_varies <- match.arg(sig_varies)
   omega_dev_st <- matrix(0, nrow = Nlakes, ncol = Nyears)
   Loc <- cbind("x" = runif(Nlakes, min = 0, max = 10), "y" = runif(Nlakes, min = 0, max = 10))
@@ -29,7 +29,7 @@ get_sim_data <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
   } else if (sig_varies == "both") {
     omega_dev_lake <- rnorm(Nlakes, 0, SigO)
     omega_dev_time <- rnorm(Nyears, 0, SigO)
-  } else if (sig_varies == "SPDE_x_ar1") {
+  } else if (sig_varies == "ar1 st") {
     omega_dev_lake <- rnorm(Nlakes, 0, 0)
     omega_dev_time <- rnorm(Nyears, 0, 0)
     # simulate space-time devs a la INLA/GMRFlib:
@@ -99,7 +99,7 @@ get_sim_data <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
 # out <- get_sim_data(
 #   Nlakes = 50, Nyears = 7,
 #   Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5,
-#   sig_varies = "SPDE_x_ar1"
+#   sig_varies = "ar1 st"
 # )$dat
 #
 # ggplot(out, aes(x, y, col = omega_dev_st)) +
@@ -110,14 +110,14 @@ get_sim_data <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
 # out <- get_sim_data(
 #   Nlakes = 7, Nyears = 5,
 #   Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5,
-#   sig_varies = "SPDE_x_ar1"
+#   sig_varies = "ar1 st"
 # )$dat
 # ggplot(out, aes(ages, y_i)) +
 #   geom_point() +
 #   facet_wrap(~lake)
 #
 # out <- purrr::map_dfr(seq_len(5), function(x) {
-#   get_sim_data(Nlakes = 7, sig_varies = "SPDE_x_ar1")$dat
+#   get_sim_data(Nlakes = 7, sig_varies = "ar1 st")$dat
 # }, .id = "sim_iter")
 # ggplot(out, aes(ages, y_i)) +
 #   facet_grid(sim_iter ~ lake) +
@@ -128,8 +128,8 @@ TMB::compile("sim2/vb_cyoa.cpp")
 fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
                     Linf = 55, T0 = -1, SigO = 0.8, cv = 0.2, omega_global = 14,
                     rho = 0.5, kappa = 0.5,
-                    sig_varies = c("fixed", "by lake", "by time", "both", "SPDE_x_ar1"),
-                    sig_varies_fitted = c("fixed", "by lake", "by time", "both", "SPDE_x_ar1"),
+                    sig_varies = c("fixed", "by lake", "by time", "both", "ar1 st"),
+                    sig_varies_fitted = c("fixed", "by lake", "by time", "both", "ar1 st"),
                     iter = NA, silent = TRUE,
                     rho_sd_prior = 50, rho_mean_prior = 0,
                     tau_O_mean_prior = 0, tau_O_sd_prior = 3) {
@@ -190,19 +190,19 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
     eps_linf = as.factor(rep(NA, data$Nlakes)),
     eps_t0 = as.factor(rep(NA, data$Nlakes))
   )
-  if (sig_varies_fitted %in% c("fixed", "by lake", "SPDE_x_ar1")) {
+  if (sig_varies_fitted %in% c("fixed", "by lake", "ar1 st")) {
     map <- c(map, list(
       eps_omega_time = as.factor(rep(NA, length(unique(sim_dat$year)))),
       ln_sd_omega_time = factor(NA)
     ))
   }
-  if (sig_varies_fitted %in% c("fixed", "by time", "SPDE_x_ar1")) {
+  if (sig_varies_fitted %in% c("fixed", "by time", "ar1 st")) {
     map <- c(map, list(
       eps_omega_lake = as.factor(rep(NA, length(unique(sim_dat$lake)))),
       ln_sd_omega_lake = factor(NA)
     ))
   }
-  if (sig_varies_fitted != "SPDE_x_ar1") {
+  if (sig_varies_fitted != "ar1 st") {
     map <- c(map, list(
       eps_omega_st = as.factor(matrix(NA, nrow = mesh$n, ncol = Nyears)),
       ln_kappa = factor(NA),
@@ -230,7 +230,7 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
       list(par = list(ln_global_omega = NA, convergence = 1))
     }
   )
-  if (sig_varies_fitted == "SPDE_x_ar1") {
+  if (sig_varies_fitted == "ar1 st") {
     # If rho is stuck at 1, fix it and re-estimate:
     rho_hat <- 2 * plogis(opt$par[["rho_unscaled"]]) - 1
     if (opt$convergence != 0 || round(rho_hat, 2) == 1.0) {
@@ -262,9 +262,9 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
     sig_varies = sig_varies,
     sig_varies_fitted = sig_varies_fitted,
     ln_global_omega = opt$par[["ln_global_omega"]],
-    tau_O = if (sig_varies_fitted == "SPDE_x_ar1") exp(opt$par[["ln_tau_O"]]) else NA,
-    rho = if (sig_varies_fitted == "SPDE_x_ar1") 2 * plogis(opt$par[["rho_unscaled"]]) - 1 else NA,
-    kappa = if (sig_varies_fitted == "SPDE_x_ar1") exp(opt$par[["ln_kappa"]]) else NA,
+    tau_O = if (sig_varies_fitted == "ar1 st") exp(opt$par[["ln_tau_O"]]) else NA,
+    rho = if (sig_varies_fitted == "ar1 st") 2 * plogis(opt$par[["rho_unscaled"]]) - 1 else NA,
+    kappa = if (sig_varies_fitted == "ar1 st") exp(opt$par[["ln_kappa"]]) else NA,
     true_ln_global_omega = log(sim_dat$omega_global[1]),
     iter = iter, convergence = opt$convergence
   )
@@ -272,8 +272,8 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
 
 # totest <- dplyr::tibble(
 #   iter = 1L,
-#   sig_varies = c("by lake", "by time", "both", "SPDE_x_ar1"),
-#   sig_varies_fitted = c("by lake", "by time", "both", "SPDE_x_ar1")
+#   sig_varies = c("by lake", "by time", "both", "ar1 st"),
+#   sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
 # )
 #
 # out = purrr::pmap_dfr(totest, fit_sim, silent = F, SigO = 0.5, rho=1) # testing
@@ -296,11 +296,11 @@ df %>%
   geom_histogram(bins = 35) +
   facet_grid(~parameter, scales = "free")
 
-set.seed(666)
+set.seed(13)
 totest <- tidyr::expand_grid(
   iter = seq_len(200L),
-  sig_varies = c("by lake", "by time", "both", "SPDE_x_ar1"),
-  sig_varies_fitted = c("by lake", "by time", "both", "SPDE_x_ar1")
+  sig_varies = c("by lake", "by time", "both", "ar1 st"),
+  sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
 )
 
 system.time({
@@ -331,6 +331,9 @@ out %>%
   xlab(expression(omega)) +
   ylab("Count")
 ggsave("sim2/hist-sim.pdf", width = 7, height = 5)
+
+out$sig_varies_fitted = factor(out$sig_varies_fitted, levels=c("by lake", "by time", "both", "ar1 st"))
+out$sig_varies = factor(out$sig_varies, levels=c("by lake", "by time", "both", "ar1 st"))
 
 out %>%
   dplyr::filter(!(iter %in% whichSims)) %>%
