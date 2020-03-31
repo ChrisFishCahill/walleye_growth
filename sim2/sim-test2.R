@@ -222,13 +222,8 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
     map = map,
     silent = silent
   )
-  opt <- tryCatch(
-    {
-      nlminb(obj$par, obj$fn, obj$gr, eval.max = 1000, iter.max = 500)
-    },
-    error = function(e) {
-      list(par = list(ln_global_omega = NA, convergence = 1))
-    }
+  opt <- tryCatch(nlminb(obj$par, obj$fn, obj$gr, eval.max = 1000, iter.max = 500),
+    error = function(e) list(par = list(ln_global_omega = NA, convergence = 1))
   )
   if (sig_varies_fitted == "ar1 st") {
     # If rho is stuck at 1, fix it and re-estimate:
@@ -242,13 +237,8 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
         map = map,
         silent = silent
       )
-      opt <- tryCatch(
-        {
-          nlminb(obj$par, obj$fn, obj$gr, eval.max = 1000, iter.max = 500)
-        },
-        error = function(e) {
-          list(par = list(ln_global_omega = NA, convergence = 1))
-        }
+      opt <- tryCatch(nlminb(obj$par, obj$fn, obj$gr, eval.max = 1000, iter.max = 500),
+        error = function(e) list(par = list(ln_global_omega = NA, convergence = 1))
       )
     }
   }
