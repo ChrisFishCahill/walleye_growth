@@ -228,7 +228,8 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
   if (sig_varies_fitted == "ar1 st") {
     # If rho is stuck, fix it and re-estimate:
     rho_hat <- 2 * plogis(opt$par[["rho_unscaled"]]) - 1
-    if (opt$convergence != 0) {
+    ln_global_omega_hat <- opt$par[["ln_global_omega"]]
+    if (opt$convergence != 0 || ln_global_omega_hat > 15) {
       map <- map$rho_unscaled <- factor(NA)
       if (round(rho_hat, 1) == 1) {
         parameters$rho_unscaled <- qlogis((0.99 + 1) / 2)
