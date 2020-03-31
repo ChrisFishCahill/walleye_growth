@@ -9,7 +9,7 @@ source("sim2/INLA_helpers.R")
 
 plan(multisession, workers = future::availableCores() / 2)
 
-get_sim_data <- function(Nyears = 10, Nlakes = 12, Nfish = 20,
+get_sim_data <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
                          Linf = 55, T0 = -1, SigO = 0.8, cv = 0.2, omega_global = 14,
                          rho = 0.5, kappa = 0.5,
                          sig_varies = c("fixed", "by lake", "by time", "both", "ar1")) {
@@ -230,7 +230,7 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
       list(par = list(ln_global_omega = NA, convergence = 1))
     }
   )
-
+  if(sig_varies_fitted == "ar1"){
   # If rho is stuck at 1, fix it and re-estimate:
   rho_hat <- 2 * plogis(opt$par[["rho_unscaled"]]) - 1
   if (opt$convergence != 0 && round(rho_hat, 2) == 1.0) {
@@ -250,6 +250,7 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
         list(par = list(ln_global_omega = NA, convergence = 1))
       }
     )
+  }
   }
   if (is.na(opt$par[["ln_global_omega"]]) || opt$convergence != 0) {
     opt$par[["ln_global_omega"]] <- NA
@@ -274,12 +275,12 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
 # )
 #
 
-# totest <- tidyr::expand_grid(
-#   iter = seq_len(100L),
-#   sig_varies = c("by time", "both"),
-#   sig_varies_fitted = c("ar1")
-# )
-#
+totest <- tidyr::expand_grid(
+  iter = seq_len(100L),
+  sig_varies = c("ar1"),
+  sig_varies_fitted = c("ar1")
+)
+
 # out = purrr::pmap_dfr(totest, fit_sim, silent = F, SigO = 0.5, rho=1) # testing
 
 set.seed(666)
@@ -293,6 +294,15 @@ totest <- tidyr::expand_grid(
 nrow(totest)
 
 # out <- pmap_dfr(totest, fit_sim, SigO = 0.4, silent = TRUE)
+#Visualize the priors
+tau_O_mean_prior = 0
+tau_O_sd_prior = 3
+hist(rnorm(1e6, mean=tau_O_mean_prior, sd=tau_O_sd_prior), main="Prior for Tau (Precision)")
+
+rho_sd_prior = 50
+rho_mean_prior = 0
+hist(rnorm(1e6, mean=0, sd=50), main="Prior for rho")
+
 
 system.time({
   out <- furrr::future_pmap_dfr(totest, fit_sim, SigO = 0.5)
