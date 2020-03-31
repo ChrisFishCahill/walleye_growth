@@ -284,17 +284,20 @@ tau_O_sd_prior <- 3
 rho_sd_prior <- 50
 rho_mean_prior <- 0
 
+.n <- 200
 df <- data.frame(
-  parameter = c(rep("ln_tau_O", 1e4), rep("rho", 1e4)),
-  value = c(
-    rnorm(1e4, mean = tau_O_mean_prior, sd = tau_O_sd_prior),
-    rnorm(1e4, mean = rho_mean_prior, sd = rho_sd_prior)
+  parameter = c(rep("tau_O", .n), rep("rho", .n)),
+  value = c(seq(0, 10, length.out = .n), seq(-1, 1, length.out = .n)),
+  density = c(
+    dnorm(seq(0, 10, length.out = .n), mean = tau_O_mean_prior, sd = tau_O_sd_prior),
+    dnorm(seq(-1, 1, length.out = .n), mean = rho_mean_prior, sd = rho_sd_prior)
   )
 )
 df %>%
-  ggplot(aes(value)) +
-  geom_histogram(bins = 35) +
-  facet_grid(~parameter, scales = "free")
+  ggplot(aes(value, density)) +
+  geom_line() +
+  facet_wrap(~parameter, scales = "free") +
+  scale_y_continuous(limits = c(0, NA))
 
 set.seed(13)
 totest <- tidyr::expand_grid(
