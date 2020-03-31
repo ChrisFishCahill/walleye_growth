@@ -228,7 +228,7 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
   if (sig_varies_fitted == "ar1 st") {
     # If rho is stuck at 1, fix it and re-estimate:
     rho_hat <- 2 * plogis(opt$par[["rho_unscaled"]]) - 1
-    if (opt$convergence != 0 || round(rho_hat, 2) == 1.0) {
+    if (opt$convergence != 0 && round(rho_hat, 1) == 1) {
       map <- map$rho_unscaled <- factor(NA)
       parameters$rho_unscaled <- qlogis((0.99 + 1) / 2)
       obj <- TMB::MakeADFun(data, parameters,
