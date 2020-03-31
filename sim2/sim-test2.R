@@ -131,7 +131,7 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
                     sig_varies = c("fixed", "by lake", "by time", "both", "ar1 st"),
                     sig_varies_fitted = c("fixed", "by lake", "by time", "both", "ar1 st"),
                     iter = NA, silent = TRUE,
-                    rho_sd_prior = 50, rho_mean_prior = 0,
+                    rho_sd_prior = 2, rho_mean_prior = 0,
                     tau_O_mean_prior = 0, tau_O_sd_prior = 3) {
   sig_varies <- match.arg(sig_varies)
   cat(
@@ -276,7 +276,7 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
 # Visualize the priors (penalties)
 tau_O_mean_prior <- 0
 tau_O_sd_prior <- 3
-rho_sd_prior <- 50
+rho_sd_prior <- 2
 rho_mean_prior <- 0
 
 .n <- 200
