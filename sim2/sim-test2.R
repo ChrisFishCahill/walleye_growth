@@ -12,7 +12,7 @@ plan(multisession, workers = future::availableCores() / 2)
 get_sim_data <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
                          Linf = 55, T0 = -1, SigO = 0.8, cv = 0.2, omega_global = 14,
                          rho = 0.5, kappa = 0.5,
-                         sig_varies = c("fixed", "by lake", "by time", "both", "ar1")) {
+                         sig_varies = c("fixed", "by lake", "by time", "both", "SPDE_x_ar1")) {
   sig_varies <- match.arg(sig_varies)
   omega_dev_st <- matrix(0, nrow = Nlakes, ncol = Nyears)
   Loc <- cbind("x" = runif(Nlakes, min = 0, max = 10), "y" = runif(Nlakes, min = 0, max = 10))
@@ -29,7 +29,7 @@ get_sim_data <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
   } else if (sig_varies == "both") {
     omega_dev_lake <- rnorm(Nlakes, 0, SigO)
     omega_dev_time <- rnorm(Nyears, 0, SigO)
-  } else if (sig_varies == "ar1") {
+  } else if (sig_varies == "SPDE_x_ar1") {
     omega_dev_lake <- rnorm(Nlakes, 0, 0)
     omega_dev_time <- rnorm(Nyears, 0, 0)
     # simulate space-time devs a la INLA/GMRFlib:
@@ -99,7 +99,7 @@ get_sim_data <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
 # out <- get_sim_data(
 #   Nlakes = 50, Nyears = 7,
 #   Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5,
-#   sig_varies = "ar1"
+#   sig_varies = "SPDE_x_ar1"
 # )$dat
 #
 # ggplot(out, aes(x, y, col = omega_dev_st)) +
@@ -110,14 +110,14 @@ get_sim_data <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
 # out <- get_sim_data(
 #   Nlakes = 7, Nyears = 5,
 #   Nfish = 100, cv = 0.01, rho = 0.5, kappa = 0.5,
-#   sig_varies = "ar1"
+#   sig_varies = "SPDE_x_ar1"
 # )$dat
 # ggplot(out, aes(ages, y_i)) +
 #   geom_point() +
 #   facet_wrap(~lake)
 #
 # out <- purrr::map_dfr(seq_len(5), function(x) {
-#   get_sim_data(Nlakes = 7, sig_varies = "ar1")$dat
+#   get_sim_data(Nlakes = 7, sig_varies = "SPDE_x_ar1")$dat
 # }, .id = "sim_iter")
 # ggplot(out, aes(ages, y_i)) +
 #   facet_grid(sim_iter ~ lake) +
@@ -128,8 +128,8 @@ TMB::compile("sim2/vb_cyoa.cpp")
 fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
                     Linf = 55, T0 = -1, SigO = 0.8, cv = 0.2, omega_global = 14,
                     rho = 0.5, kappa = 0.5,
-                    sig_varies = c("fixed", "by lake", "by time", "both", "ar1"),
-                    sig_varies_fitted = c("fixed", "by lake", "by time", "both", "ar1"),
+                    sig_varies = c("fixed", "by lake", "by time", "both", "SPDE_x_ar1"),
+                    sig_varies_fitted = c("fixed", "by lake", "by time", "both", "SPDE_x_ar1"),
                     iter = NA, silent = TRUE,
                     rho_sd_prior = 50, rho_mean_prior = 0,
                     tau_O_mean_prior = 0, tau_O_sd_prior = 3) {
@@ -190,19 +190,19 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
     eps_linf = as.factor(rep(NA, data$Nlakes)),
     eps_t0 = as.factor(rep(NA, data$Nlakes))
   )
-  if (sig_varies_fitted %in% c("fixed", "by lake", "ar1")) {
+  if (sig_varies_fitted %in% c("fixed", "by lake", "SPDE_x_ar1")) {
     map <- c(map, list(
       eps_omega_time = as.factor(rep(NA, length(unique(sim_dat$year)))),
       ln_sd_omega_time = factor(NA)
     ))
   }
-  if (sig_varies_fitted %in% c("fixed", "by time", "ar1")) {
+  if (sig_varies_fitted %in% c("fixed", "by time", "SPDE_x_ar1")) {
     map <- c(map, list(
       eps_omega_lake = as.factor(rep(NA, length(unique(sim_dat$lake)))),
       ln_sd_omega_lake = factor(NA)
     ))
   }
-  if (sig_varies_fitted != "ar1") {
+  if (sig_varies_fitted != "SPDE_x_ar1") {
     map <- c(map, list(
       eps_omega_st = as.factor(matrix(NA, nrow = mesh$n, ncol = Nyears)),
       ln_kappa = factor(NA),
@@ -230,28 +230,29 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
       list(par = list(ln_global_omega = NA, convergence = 1))
     }
   )
-  if(sig_varies_fitted == "ar1"){
-  # If rho is stuck at 1, fix it and re-estimate:
-  rho_hat <- 2 * plogis(opt$par[["rho_unscaled"]]) - 1
-  if (opt$convergence != 0 && round(rho_hat, 2) == 1.0) {
-    map <- map$rho_unscaled <- factor(NA)
-    parameters$rho_unscaled <- qlogis((0.99 + 1) / 2)
-    obj <- TMB::MakeADFun(data, parameters,
-      DLL = "vb_cyoa",
-      random = c("eps_omega_lake", "eps_omega_time", "eps_omega_st", "eps_linf", "eps_t0"),
-      map = map,
-      silent = silent
-    )
-    opt <- tryCatch(
-      {
-        nlminb(obj$par, obj$fn, obj$gr, eval.max = 1000, iter.max = 500)
-      },
-      error = function(e) {
-        list(par = list(ln_global_omega = NA, convergence = 1))
-      }
-    )
+  if (sig_varies_fitted == "SPDE_x_ar1") {
+    # If rho is stuck at 1, fix it and re-estimate:
+    rho_hat <- 2 * plogis(opt$par[["rho_unscaled"]]) - 1
+    if (opt$convergence != 0 || round(rho_hat, 2) == 1.0) {
+      map <- map$rho_unscaled <- factor(NA)
+      parameters$rho_unscaled <- qlogis((0.99 + 1) / 2)
+      obj <- TMB::MakeADFun(data, parameters,
+        DLL = "vb_cyoa",
+        random = c("eps_omega_lake", "eps_omega_time", "eps_omega_st", "eps_linf", "eps_t0"),
+        map = map,
+        silent = silent
+      )
+      opt <- tryCatch(
+        {
+          nlminb(obj$par, obj$fn, obj$gr, eval.max = 1000, iter.max = 500)
+        },
+        error = function(e) {
+          list(par = list(ln_global_omega = NA, convergence = 1))
+        }
+      )
+    }
   }
-  }
+
   if (is.na(opt$par[["ln_global_omega"]]) || opt$convergence != 0) {
     opt$par[["ln_global_omega"]] <- NA
     opt$convergence <- 1
@@ -261,8 +262,9 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
     sig_varies = sig_varies,
     sig_varies_fitted = sig_varies_fitted,
     ln_global_omega = opt$par[["ln_global_omega"]],
-    tau_O = if (sig_varies_fitted == "ar1") exp(opt$par[["ln_tau_O"]]) else NA,
-    rho = if (sig_varies_fitted == "ar1") 2 * plogis(opt$par[["rho_unscaled"]]) - 1 else NA,
+    tau_O = if (sig_varies_fitted == "SPDE_x_ar1") exp(opt$par[["ln_tau_O"]]) else NA,
+    rho = if (sig_varies_fitted == "SPDE_x_ar1") 2 * plogis(opt$par[["rho_unscaled"]]) - 1 else NA,
+    kappa = if (sig_varies_fitted == "SPDE_x_ar1") exp(opt$par[["ln_kappa"]]) else NA,
     true_ln_global_omega = log(sim_dat$omega_global[1]),
     iter = iter, convergence = opt$convergence
   )
@@ -270,49 +272,51 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
 
 # totest <- dplyr::tibble(
 #   iter = 1L,
-#   sig_varies = c("by lake", "by time", "both", "ar1"),
-#   sig_varies_fitted = c("by lake", "by time", "both", "ar1")
+#   sig_varies = c("by lake", "by time", "both", "SPDE_x_ar1"),
+#   sig_varies_fitted = c("by lake", "by time", "both", "SPDE_x_ar1")
 # )
 #
-
-totest <- tidyr::expand_grid(
-  iter = seq_len(100L),
-  sig_varies = c("ar1"),
-  sig_varies_fitted = c("ar1")
-)
-
 # out = purrr::pmap_dfr(totest, fit_sim, silent = F, SigO = 0.5, rho=1) # testing
 
-set.seed(666)
+# Visualize the priors (penalties)
+tau_O_mean_prior <- 0
+tau_O_sd_prior <- 3
+rho_sd_prior <- 50
+rho_mean_prior <- 0
 
+df <- data.frame(
+  parameter = c(rep("ln_tau_O", 1e4), rep("rho", 1e4)),
+  value = c(
+    rnorm(1e4, mean = tau_O_mean_prior, sd = tau_O_sd_prior),
+    rnorm(1e4, mean = rho_mean_prior, sd = rho_sd_prior)
+  )
+)
+df %>%
+  ggplot(aes(value)) +
+  geom_histogram(bins = 35) +
+  facet_grid(~parameter, scales = "free")
+
+set.seed(666)
 totest <- tidyr::expand_grid(
   iter = seq_len(200L),
-  sig_varies = c("by lake", "by time", "both", "ar1"),
-  sig_varies_fitted = c("by lake", "by time", "both", "ar1")
+  sig_varies = c("by lake", "by time", "both", "SPDE_x_ar1"),
+  sig_varies_fitted = c("by lake", "by time", "both", "SPDE_x_ar1")
 )
 
-nrow(totest)
-
-# out <- pmap_dfr(totest, fit_sim, SigO = 0.4, silent = TRUE)
-#Visualize the priors
-tau_O_mean_prior = 0
-tau_O_sd_prior = 3
-hist(rnorm(1e6, mean=tau_O_mean_prior, sd=tau_O_sd_prior), main="Prior for Tau (Precision)")
-
-rho_sd_prior = 50
-rho_mean_prior = 0
-hist(rnorm(1e6, mean=0, sd=50), main="Prior for rho")
-
-
 system.time({
-  out <- furrr::future_pmap_dfr(totest, fit_sim, SigO = 0.5)
+  out <- furrr::future_pmap_dfr(totest, fit_sim, tau_O_sd_prior = tau_O_sd_prior)
 })
 
+# which failed?
 buggered <- out %>% dplyr::filter(convergence == 1)
-print(buggered, n = Inf) # which failed?
+print(buggered, n = Inf)
 whichSims <- buggered$iter
+message(paste0(
+  paste0(length(whichSims), " out of "),
+  length(unique(totest$iter)), " iterations did not converge"
+))
 
-table(buggered$sig_varies) # where are the failures occuring.  primarily by lake / by time
+table(buggered$sig_varies)
 
 saveRDS(out, file = "sim2/sim2.rds")
 out <- readRDS("sim2/sim2.rds")
@@ -321,7 +325,7 @@ out %>%
   dplyr::mutate(sig_varies = paste0("Sim = ", sig_varies)) %>%
   dplyr::mutate(sig_varies_fitted = paste0("Fitted = ", sig_varies_fitted)) %>%
   ggplot(aes(ln_global_omega)) +
-  geom_histogram(bins = 50) +
+  geom_histogram(bins = 30) +
   geom_vline(xintercept = out[["true_ln_global_omega"]][1]) +
   facet_grid(sig_varies_fitted ~ sig_varies) +
   xlab(expression(omega)) +
@@ -334,8 +338,8 @@ out %>%
   ggplot(aes(sig_varies, exp(ln_global_omega), colour = sig_varies_fitted, fill = Matched)) +
   geom_boxplot() +
   geom_hline(yintercept = exp(out[["true_ln_global_omega"]][1])) +
-  xlab(expression(Simulated~omega~variation)) +
-  labs(colour = expression(Fitted~omega~variation)) +
+  xlab(expression(Simulated ~ omega ~ variation)) +
+  labs(colour = expression(Fitted ~ omega ~ variation)) +
   scale_color_brewer(palette = "Dark2") +
   scale_fill_manual(values = c("white", "grey60")) +
   ylab(expression(omega[0]))
