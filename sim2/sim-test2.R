@@ -302,7 +302,7 @@ totest <- tidyr::expand_grid(
 )
 
 system.time({
-  out <- furrr::future_pmap_dfr(totest, fit_sim, tau_O_sd_prior = tau_O_sd_prior)
+  out <- furrr::future_pmap_dfr(totest, fit_sim, tau_O_sd_prior = tau_O_sd_prior, rho_sd_prior = rho_sd_prior)
 })
 
 # which failed?
