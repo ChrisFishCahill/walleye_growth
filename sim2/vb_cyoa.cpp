@@ -1,6 +1,7 @@
 #include <TMB.hpp>
 /*
  * Choose your own correlation adventure for the von Bertalanffy
+ * Cahill and Anderson 31 March 2020
 */
 
 template <class Type>
@@ -28,15 +29,15 @@ Type objective_function<Type>::operator()()
   using namespace Eigen;
 
   // Data
-  DATA_INTEGER(Nobs);     // Observations in the dataset
-  DATA_VECTOR(length_i);  // length fish i
-  DATA_VECTOR(age_i);     // age of fish i
-  DATA_IVECTOR(lake_i);   // grouping factor for lake
-  DATA_IVECTOR(time_i);   // grouping factor for time
-  DATA_INTEGER(Nlakes);   // Number of lakes
-  DATA_SCALAR(rho_sd_prior); // rho SD prior
-  DATA_SCALAR(rho_mean_prior); // rho mean prior
-  DATA_SCALAR(tau_O_sd_prior); // tau_O_ SD prior
+  DATA_INTEGER(Nobs);            // Observations in the dataset
+  DATA_VECTOR(length_i);         // length fish i
+  DATA_VECTOR(age_i);            // age of fish i
+  DATA_IVECTOR(lake_i);          // grouping factor for lake
+  DATA_IVECTOR(time_i);          // grouping factor for time
+  DATA_INTEGER(Nlakes);          // Number of lakes
+  DATA_SCALAR(rho_sd_prior);     // rho SD prior
+  DATA_SCALAR(rho_mean_prior);   // rho mean prior
+  DATA_SCALAR(tau_O_sd_prior);   // tau_O_ SD prior
   DATA_SCALAR(tau_O_mean_prior); // tau_O_ mean prior
 
   // SPDE objects
@@ -87,7 +88,6 @@ Type objective_function<Type>::operator()()
   jnll += SCALE(SEPARABLE(AR1(rho), GMRF(Q)), 1.0 / exp(ln_tau_O))(eps_omega_st);
 
   // penalties:
-  //
   jnll -= dnorm(rho, rho_mean_prior, rho_sd_prior, true);
   jnll -= dnorm(ln_tau_O, tau_O_mean_prior, tau_O_sd_prior, true);
 
