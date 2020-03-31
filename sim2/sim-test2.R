@@ -226,11 +226,15 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
     error = function(e) list(par = list(ln_global_omega = NA, convergence = 1))
   )
   if (sig_varies_fitted == "ar1 st") {
-    # If rho is stuck at 1, fix it and re-estimate:
+    # If rho is stuck, fix it and re-estimate:
     rho_hat <- 2 * plogis(opt$par[["rho_unscaled"]]) - 1
-    if (opt$convergence != 0 && round(rho_hat, 1) == 1) {
+    if (opt$convergence != 0) {
       map <- map$rho_unscaled <- factor(NA)
-      parameters$rho_unscaled <- qlogis((0.99 + 1) / 2)
+      if (round(rho_hat, 1) == 1) {
+        parameters$rho_unscaled <- qlogis((0.99 + 1) / 2)
+      } else {
+        parameters$rho_unscaled <- qlogis((0 + 1) / 2)
+      }
       obj <- TMB::MakeADFun(data, parameters,
         DLL = "vb_cyoa",
         random = c("eps_omega_lake", "eps_omega_time", "eps_omega_st", "eps_linf", "eps_t0"),
