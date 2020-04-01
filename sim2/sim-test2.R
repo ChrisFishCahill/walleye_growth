@@ -225,13 +225,15 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
   opt <- tryCatch(nlminb(obj$par, obj$fn, obj$gr, eval.max = 1000, iter.max = 500),
     error = function(e) list(par = list(ln_global_omega = NA, convergence = 1))
   )
+
   if (sig_varies_fitted == "ar1 st") {
-    # If rho is stuck, fix it and re-estimate:
     rho_hat <- 2 * plogis(opt$par[["rho_unscaled"]]) - 1
     ln_global_omega_hat <- opt$par[["ln_global_omega"]]
-    if (opt$convergence != 0 || ln_global_omega_hat > 15) {
+    # If fails to converge, or omega is stupid high, or rho bumps against the boundary:
+    if (opt$convergence != 0 || ln_global_omega_hat > 15 || round(rho_hat, 2) == 1) {
       map <- map$rho_unscaled <- factor(NA)
-      if (round(rho_hat, 1) == 1) {
+      # If rho is stuck, fix it and re-estimate:
+      if (round(rho_hat, 2) == 1) {
         parameters$rho_unscaled <- qlogis((0.99 + 1) / 2)
       } else {
         parameters$rho_unscaled <- qlogis((0 + 1) / 2)
@@ -247,11 +249,16 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
       )
     }
   }
-
-  if (is.na(opt$par[["ln_global_omega"]]) || opt$convergence != 0) {
+  ln_global_omega_hat <- opt$par[["ln_global_omega"]]
+  ln_global_linf_hat <- opt$par[["ln_global_linf"]]
+  if (is.na(ln_global_omega_hat) || opt$convergence != 0) {
+    opt$par[["ln_global_omega"]] <- NA
+    opt$convergence <- 1
+  } else if (!is.na(ln_global_omega_hat) && ln_global_omega_hat > ln_global_linf_hat) {
     opt$par[["ln_global_omega"]] <- NA
     opt$convergence <- 1
   }
+
   dyn.unload(dynlib("sim2/vb_cyoa"))
   tibble::tibble(
     sig_varies = sig_varies,
@@ -266,12 +273,12 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
 }
 
 # totest <- dplyr::tibble(
-#   iter = 1L,
-#   sig_varies = c("by lake", "by time", "both", "ar1 st"),
-#   sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
+#   iter = seq_len(1L),
+#   sig_varies = c("both"),
+#   sig_varies_fitted = c("ar1 st")
 # )
-#
-# out = purrr::pmap_dfr(totest, fit_sim, silent = F, SigO = 0.5, rho=1) # testing
+# set.seed(1)
+# out = purrr::pmap_dfr(totest, fit_sim, silent = F) # testing
 
 # Visualize the priors (penalties)
 tau_O_mean_prior <- 0
@@ -294,15 +301,22 @@ df %>%
   facet_wrap(~parameter, scales = "free") +
   scale_y_continuous(limits = c(0, NA))
 
-set.seed(13)
+#set.seed(13)
 totest <- tidyr::expand_grid(
-  iter = seq_len(200L),
+  iter = seq_len(10L),
   sig_varies = c("by lake", "by time", "both", "ar1 st"),
   sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
 )
 
+#can we replicate our results?
+future_options(seed = 123L)
+furrr::future_pmap_dfr(totest, fit_sim, .progress=T)
+future_options(seed = 123L)
+furrr::future_pmap_dfr(totest, fit_sim, .progress=T)
+
+set.seed(1)
 system.time({
-  out <- furrr::future_pmap_dfr(totest, fit_sim, tau_O_sd_prior = tau_O_sd_prior, rho_sd_prior = rho_sd_prior)
+  out <- furrr::future_pmap_dfr(totest, fit_sim, .progress=T)
 })
 
 # which failed?
@@ -313,6 +327,8 @@ message(paste0(
   paste0(length(whichSims), " out of "),
   length(unique(totest$iter)), " iterations did not converge"
 ))
+
+# TODO design rho-kappa-sigO experiement.
 
 table(buggered$sig_varies)
 
@@ -330,8 +346,8 @@ out %>%
   ylab("Count")
 ggsave("sim2/hist-sim.pdf", width = 7, height = 5)
 
-out$sig_varies_fitted = factor(out$sig_varies_fitted, levels=c("by lake", "by time", "both", "ar1 st"))
-out$sig_varies = factor(out$sig_varies, levels=c("by lake", "by time", "both", "ar1 st"))
+out$sig_varies_fitted <- factor(out$sig_varies_fitted, levels = c("by lake", "by time", "both", "ar1 st"))
+out$sig_varies <- factor(out$sig_varies, levels = c("by lake", "by time", "both", "ar1 st"))
 
 out %>%
   dplyr::filter(!(iter %in% whichSims)) %>%
