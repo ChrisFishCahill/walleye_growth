@@ -265,9 +265,9 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
     sig_varies = sig_varies,
     sig_varies_fitted = sig_varies_fitted,
     ln_global_omega = opt$par[["ln_global_omega"]],
-    tau_O = if (sig_varies_fitted == "ar1 st") exp(opt$par[["ln_tau_O"]]) else NA,
-    rho = if (sig_varies_fitted == "ar1 st") 2 * plogis(opt$par[["rho_unscaled"]]) - 1 else NA,
-    kappa = if (sig_varies_fitted == "ar1 st") exp(opt$par[["ln_kappa"]]) else NA,
+    #tau_O = if (sig_varies_fitted == "ar1 st") exp(opt$par[["ln_tau_O"]]) else NA,
+    #rho = if (sig_varies_fitted == "ar1 st") 2 * plogis(opt$par[["rho_unscaled"]]) - 1 else NA,
+    #kappa = if (sig_varies_fitted == "ar1 st") exp(opt$par[["ln_kappa"]]) else NA,
     true_ln_global_omega = log(sim_dat$omega_global[1]),
     iter = iter, convergence = opt$convergence
   )
@@ -304,7 +304,7 @@ df %>%
 
 #set.seed(13)
 totest <- tidyr::expand_grid(
-  iter = seq_len(10L),
+  iter = seq_len(200L),
   sig_varies = c("by lake", "by time", "both", "ar1 st"),
   sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
 )
@@ -312,6 +312,7 @@ totest <- tidyr::expand_grid(
 system.time({
   out <- furrr::future_pmap_dfr(totest, fit_sim, .progress=T, .options=future_options(seed=123L))
 })
+
 
 # which failed?
 buggered <- out %>% dplyr::filter(convergence == 1)
