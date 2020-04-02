@@ -265,23 +265,20 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
     sig_varies = sig_varies,
     sig_varies_fitted = sig_varies_fitted,
     ln_global_omega = opt$par[["ln_global_omega"]],
-    #tau_O = if (sig_varies_fitted == "ar1 st") exp(opt$par[["ln_tau_O"]]) else NA,
-    #rho = if (sig_varies_fitted == "ar1 st") 2 * plogis(opt$par[["rho_unscaled"]]) - 1 else NA,
-    #kappa = if (sig_varies_fitted == "ar1 st") exp(opt$par[["ln_kappa"]]) else NA,
     true_ln_global_omega = log(sim_dat$omega_global[1]),
     iter = iter, convergence = opt$convergence
   )
 }
 
-totest <- dplyr::tibble(
-  iter = seq_len(1L),
-  sig_varies = c("both"),
-  sig_varies_fitted = c("ar1 st")
-)
+# totest <- dplyr::tibble(
+#   iter = seq_len(1L),
+#   sig_varies = c("both"),
+#   sig_varies_fitted = c("ar1 st")
+# )
 # set.seed(1)
 # out = purrr::pmap_dfr(totest, fit_sim, silent = F) # testing
 
-# Visualize the priors (penalties)
+# Visualize the priors (penalties) for ar1 st model:
 tau_O_mean_prior <- 0
 tau_O_sd_prior <- 3
 rho_sd_prior <- 2
@@ -302,16 +299,46 @@ df %>%
   facet_wrap(~parameter, scales = "free") +
   scale_y_continuous(limits = c(0, NA))
 
-#set.seed(13)
+set.seed(9473772)
+pars_to_sim <- tidyr::expand_grid(
+  rho = c(0.1, 0.5, 0.9),
+  kappa = c(2.7, 0.57, 0.28), # 10%, 50%, and 90% range on 10x10 grid
+  SigO = c(0.2, 0.5, 0.8)
+) %>%
+  tibble::add_column(
+    seed = sample.int(1e6, nrow(pars_to_sim)),
+    simulation = 1:nrow(pars_to_sim)
+  )
+
+pars_to_sim
+
+run_sim_experiment <- function(rho = rho, kappa = kappa,
+                               SigO = SigO, seed = seed,
+                               simulation = simulation) {
+  out <- furrr::future_pmap_dfr(totest, fit_sim,
+    rho = rho, kappa = kappa, SigO = SigO,
+    .options = furrr::future_options(seed = seed)
+  )
+  file_name <- paste0(paste0("sim2/sim_", simulation), ".rds")
+  saveRDS(out, file = file_name)
+}
+
 totest <- tidyr::expand_grid(
-  iter = seq_len(200L),
+  iter = seq_len(10L),
   sig_varies = c("by lake", "by time", "both", "ar1 st"),
   sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
 )
 
 system.time({
-  out <- furrr::future_pmap_dfr(totest, fit_sim, .progress=T, .options=future_options(seed=123L))
+  pwalk(pars_to_sim, run_sim_experiment)
 })
+
+# out <- furrr::future_pmap_dfr(totest, fit_sim,
+# .options = future_options(seed = 123L) #for testing
+
+#--------
+
+
 
 
 # which failed?
