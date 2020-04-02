@@ -5,6 +5,7 @@ library(future)
 library(tidyr)
 library(INLA)
 library(purrr)
+library(furrr)
 source("sim2/INLA_helpers.R")
 
 plan(multisession, workers = future::availableCores() / 2)
@@ -272,11 +273,11 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
   )
 }
 
-# totest <- dplyr::tibble(
-#   iter = seq_len(1L),
-#   sig_varies = c("both"),
-#   sig_varies_fitted = c("ar1 st")
-# )
+totest <- dplyr::tibble(
+  iter = seq_len(1L),
+  sig_varies = c("both"),
+  sig_varies_fitted = c("ar1 st")
+)
 # set.seed(1)
 # out = purrr::pmap_dfr(totest, fit_sim, silent = F) # testing
 
@@ -308,15 +309,8 @@ totest <- tidyr::expand_grid(
   sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
 )
 
-#can we replicate our results?
-future_options(seed = 123L)
-furrr::future_pmap_dfr(totest, fit_sim, .progress=T)
-future_options(seed = 123L)
-furrr::future_pmap_dfr(totest, fit_sim, .progress=T)
-
-set.seed(1)
 system.time({
-  out <- furrr::future_pmap_dfr(totest, fit_sim, .progress=T)
+  out <- furrr::future_pmap_dfr(totest, fit_sim, .progress=T, .options=future_options(seed=123L))
 })
 
 # which failed?
