@@ -306,20 +306,20 @@ pars_to_sim <- tidyr::expand_grid(
   SigO = c(0.2, 0.5, 0.8)
 ) %>%
   tibble::add_column(
-    seed = sample.int(1e6, nrow(pars_to_sim)),
-    simulation = 1:nrow(pars_to_sim)
+    seed = sample.int(1e6, 27),
+    sim = 1:27
   )
 
 pars_to_sim
 
 run_sim_experiment <- function(rho = rho, kappa = kappa,
                                SigO = SigO, seed = seed,
-                               simulation = simulation) {
+                               sim = sim) {
   out <- furrr::future_pmap_dfr(totest, fit_sim,
     rho = rho, kappa = kappa, SigO = SigO,
     .options = furrr::future_options(seed = seed)
   )
-  file_name <- paste0(paste0("sim2/sim_", simulation), ".rds")
+  file_name <- paste0(paste0("sim2/sim_", sim), ".rds")
   saveRDS(out, file = file_name)
 }
 
@@ -333,13 +333,15 @@ system.time({
   pwalk(pars_to_sim, run_sim_experiment)
 })
 
-# out <- furrr::future_pmap_dfr(totest, fit_sim,
-# .options = future_options(seed = 123L) #for testing
+out <- readRDS("sim2/sim_1.rds")
+print(out, n=Inf)
 
+#End end end
+#--------
 #--------
 
-
-
+# out <- furrr::future_pmap_dfr(totest, fit_sim,
+# .options = future_options(seed = 123L) #for testing
 
 # which failed?
 buggered <- out %>% dplyr::filter(convergence == 1)
@@ -350,12 +352,8 @@ message(paste0(
   length(unique(totest$iter)), " iterations did not converge"
 ))
 
-# TODO design rho-kappa-sigO experiement.
-
 table(buggered$sig_varies)
 
-saveRDS(out, file = "sim2/sim2.rds")
-out <- readRDS("sim2/sim2.rds")
 out %>%
   dplyr::filter(!(iter %in% whichSims)) %>%
   dplyr::mutate(sig_varies = paste0("Sim = ", sig_varies)) %>%
