@@ -6,6 +6,7 @@ library(tidyr)
 library(INLA)
 library(purrr)
 library(furrr)
+library(dplyr)
 source("sim2/INLA_helpers.R")
 
 plan(multisession, workers = future::availableCores() / 2)
@@ -212,11 +213,10 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
     ))
   }
 
-  if (silent) {
-    sink(tempfile())
-    on.exit(sink())
+  if (!"vb_cyoa" %in% names(getLoadedDLLs())) {
+    cat(crayon::blue(clisymbols::symbol$star), "Loading DLL\n")
+    dyn.load(dynlib("sim2/vb_cyoa"))
   }
-  dyn.load(dynlib("sim2/vb_cyoa"))
   obj <- TMB::MakeADFun(data, parameters,
     DLL = "vb_cyoa",
     random = c("eps_omega_lake", "eps_omega_time", "eps_omega_st", "eps_linf", "eps_t0"),
@@ -260,7 +260,7 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
     opt$convergence <- 1
   }
 
-  dyn.unload(dynlib("sim2/vb_cyoa"))
+  # dyn.unload(dynlib("sim2/vb_cyoa"))
   tibble::tibble(
     sig_varies = sig_varies,
     sig_varies_fitted = sig_varies_fitted,
@@ -299,16 +299,31 @@ df %>%
   facet_wrap(~parameter, scales = "free") +
   scale_y_continuous(limits = c(0, NA))
 
-set.seed(9473772)
-pars_to_sim <- tidyr::expand_grid(
+pars_to_sim1 <- tidyr::expand_grid(
   rho = c(0.1, 0.5, 0.9),
+  kappa = c(0.57), # 10%, 50%, and 90% range on 10x10 grid
+  SigO = c(0.5)
+)
+pars_to_sim2 <- tidyr::expand_grid(
+  rho = c(0.5),
   kappa = c(2.7, 0.57, 0.28), # 10%, 50%, and 90% range on 10x10 grid
+  SigO = c(0.5)
+)
+pars_to_sim3 <- tidyr::expand_grid(
+  rho = c(0.5),
+  kappa = c(0.57), # 10%, 50%, and 90% range on 10x10 grid
   SigO = c(0.2, 0.5, 0.8)
-) %>%
+)
+pars_to_sim <- bind_rows(pars_to_sim1, pars_to_sim2) %>%
+  bind_rows(pars_to_sim3)
+
+set.seed(9473772)
+pars_to_sim <- pars_to_sim %>%
   tibble::add_column(
-    seed = sample.int(1e6, 27),
-    sim = 1:27
-  )
+    seed = sample.int(1e6, nrow(pars_to_sim)),
+    sim = seq_len(nrow(pars_to_sim))
+)
+
 
 pars_to_sim
 
