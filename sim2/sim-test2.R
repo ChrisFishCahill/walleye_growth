@@ -301,7 +301,7 @@ df %>%
 
 pars_to_sim1 <- tidyr::expand_grid(
   rho = c(0.1, 0.5, 0.9),
-  kappa = c(0.57), # 10%, 50%, and 90% range on 10x10 grid
+  kappa = c(0.57), # 50% range on 10x10 grid
   SigO = c(0.5)
 )
 pars_to_sim2 <- tidyr::expand_grid(
@@ -311,7 +311,7 @@ pars_to_sim2 <- tidyr::expand_grid(
 )
 pars_to_sim3 <- tidyr::expand_grid(
   rho = c(0.5),
-  kappa = c(0.57), # 10%, 50%, and 90% range on 10x10 grid
+  kappa = c(0.57), # 50% range on 10x10 grid
   SigO = c(0.2, 0.5, 0.8)
 )
 pars_to_sim <- bind_rows(pars_to_sim1, pars_to_sim2) %>%
@@ -322,20 +322,24 @@ pars_to_sim <- pars_to_sim %>%
   tibble::add_column(
     seed = sample.int(1e6, nrow(pars_to_sim)),
     sim = seq_len(nrow(pars_to_sim))
-)
-
+  )
 
 pars_to_sim
 
 run_sim_experiment <- function(rho = rho, kappa = kappa,
                                SigO = SigO, seed = seed,
                                sim = sim) {
-  out <- furrr::future_pmap_dfr(totest, fit_sim,
-    rho = rho, kappa = kappa, SigO = SigO,
-    .options = furrr::future_options(seed = seed)
-  )
-  file_name <- paste0(paste0("sim2/sim_", sim), ".rds")
-  saveRDS(out, file = file_name)
+  f <- paste0("sim2/sim_", sim, ".rds")
+  if (file.exists(f)) {
+    return(NULL)
+  } else {
+    out <- furrr::future_pmap_dfr(totest, fit_sim,
+      rho = rho, kappa = kappa, SigO = SigO,
+      .options = furrr::future_options(seed = seed)
+    )
+    file_name <- paste0("sim2/sim_", sim, ".rds")
+    saveRDS(out, file = f)
+  }
 }
 
 totest <- tidyr::expand_grid(
@@ -348,10 +352,7 @@ system.time({
   pwalk(pars_to_sim, run_sim_experiment)
 })
 
-out <- readRDS("sim2/sim_1.rds")
-print(out, n=Inf)
-
-#End end end
+# End end end
 #--------
 #--------
 
