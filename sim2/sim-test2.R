@@ -337,7 +337,6 @@ run_sim_experiment <- function(rho = rho, kappa = kappa,
       rho = rho, kappa = kappa, SigO = SigO,
       .options = furrr::future_options(seed = seed)
     )
-    file_name <- paste0("sim2/sim_", sim, ".rds")
     saveRDS(out, file = f)
   }
 }
