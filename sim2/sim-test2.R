@@ -394,6 +394,12 @@ out = out %>% mutate(sim_name = case_when(
   sim == "sim_9" ~ "sigma[O] == 0.8"
 ))
 
+types <- tibble(sim = unique(out$sim))
+types$param <- rep(c("rho", "spatial~range", "sigma[O]"), each = 3)
+types$levels <- rep(c("Low", "Medium", "High"), 3)
+out <- left_join(out, types, by = "sim")
+
+out$levels <- factor(out$levels, levels = c("Low", "Medium", "High"))
 out$sig_varies_fitted <- factor(out$sig_varies_fitted, levels = c("by lake", "by time", "both", "ar1 st"))
 out$sig_varies <- factor(out$sig_varies, levels = c("by lake", "by time", "both", "ar1 st"))
 
@@ -425,6 +431,83 @@ pdf("sim2/simulations.pdf", width=7, height=5)
 plots$plot
 dev.off()
 
+cowplot::plot_grid(plotlist = plots$plot)
+ggsave("sim2/simulations-plot-grid.pdf", width = 14, height = 12)
+
+true_omega <- exp(out$true_ln_global_omega)[1]
+g <- out %>%
+  # out[sample(seq_len(nrow(out)), 6e3), ] %>%
+  dplyr::filter(is.na(failed_iter)) %>%
+  dplyr::mutate(Matched = sig_varies_fitted == sig_varies) %>%
+  ggplot(aes(sig_varies, exp(ln_global_omega),
+    colour = sig_varies_fitted, fill = Matched
+  )) +
+  geom_boxplot(outlier.size = 0.6) +
+  facet_grid(vars(param), vars(levels), labeller = label_parsed) +
+  geom_hline(yintercept = true_omega, lty = 1, alpha = 0.6) +
+  xlab(expression(Simulated ~ omega[0] ~ variation)) +
+  labs(colour = expression(Fitted ~ omega[0] ~ variation)) +
+  scale_color_brewer(palette = "Dark2") +
+  scale_fill_manual(values = c("white", "grey60")) +
+  ylab(expression(Estimated~omega[0])) +
+  coord_cartesian(ylim = c(true_omega * 0.5, true_omega * 2)) +
+  ggsidekick::theme_sleek()
+ggsave("sim2/simulations-facet-grid.pdf", width = 10, height = 6)
+
+true_omega <- exp(out$true_ln_global_omega)[1]
+g <-
+  out %>%
+  # out[sample(seq_len(nrow(out)), 6e3), ] %>%
+  dplyr::filter(is.na(failed_iter)) %>%
+  dplyr::mutate(Matched = sig_varies_fitted == sig_varies) %>%
+  ggplot(aes(sig_varies, exp(ln_global_omega),
+    colour = sig_varies_fitted, fill = Matched
+  )) +
+  geom_violin(draw_quantiles = c(0.5), adjust = 0.8) +
+  facet_grid(vars(param), vars(levels), labeller = label_parsed) +
+  geom_hline(yintercept = true_omega, lty = 1, alpha = 0.6) +
+  xlab(expression(Simulated ~ omega[0] ~ variation)) +
+  labs(colour = expression(Fitted ~ omega[0] ~ variation)) +
+  scale_color_brewer(palette = "Dark2") +
+  scale_fill_manual(values = c("white", "grey60")) +
+  ylab(expression(Estimated~omega[0])) +
+  coord_cartesian(ylim = c(true_omega * 0.5, true_omega * 2)) +
+  ggsidekick::theme_sleek()
+ggsave("sim2/simulations-facet-grid-violin.pdf", width = 10, height = 6)
+
+true_omega <- exp(out$true_ln_global_omega)[1]
+plot_dat <-
+  out %>%
+  # out[sample(seq_len(nrow(out)), 6e3), ] %>%
+  dplyr::filter(is.na(failed_iter)) %>%
+  dplyr::mutate(Matched = sig_varies_fitted == sig_varies) %>%
+  group_by(param, levels, Matched, sig_varies, sig_varies_fitted) %>%
+  summarise(
+    lwr = quantile(ln_global_omega, 0.1),
+    med = quantile(ln_global_omega, 0.50),
+    upr = quantile(ln_global_omega, 0.9),
+    lwr2 = quantile(ln_global_omega, 0.25),
+    upr2 = quantile(ln_global_omega, 0.75)
+    )
+
+dodge_width <- 0.7
+g <- plot_dat %>% ggplot(aes(x = sig_varies, y = exp(med),
+  colour = sig_varies_fitted, shape = Matched)) +
+  geom_hline(yintercept = true_omega, lty = 1, alpha = 0.6) +
+  geom_linerange(aes(ymin = exp(lwr), ymax = exp(upr)), position = position_dodge(width = dodge_width), lwd = 0.4) +
+  geom_linerange(aes(ymin = exp(lwr2), ymax = exp(upr2)), position = position_dodge(width = dodge_width), lwd = 0.8) +
+  geom_point(position = position_dodge(width = dodge_width), fill = "white", size = 2) +
+  facet_grid(vars(param), vars(levels), labeller = label_parsed) +
+  xlab(expression(Simulated ~ omega[0] ~ variation)) +
+  labs(colour = expression(Fitted ~ omega[0] ~ variation)) +
+  scale_color_brewer(palette = "Dark2") +
+  scale_fill_manual(values = c("white", "grey60")) +
+  ylab(expression(Estimated~omega[0])) +
+  coord_cartesian(ylim = c(true_omega * 0.66, true_omega * 1.5)) +
+  ggsidekick::theme_sleek() +
+  scale_shape_manual(values = c(19, 21)) +
+  scale_y_log10(breaks = seq(8, 36, 2))
+ggsave("sim2/simulations-facet-grid-pointrange.pdf", width = 8, height = 5)
 
 
 # out %>%
