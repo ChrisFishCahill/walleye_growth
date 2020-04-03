@@ -350,7 +350,6 @@ totest <- tidyr::expand_grid(
   sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
 )
 
-
 if (FALSE) {
   system.time({
     # 4.73 hrs on Cahill's desktop
