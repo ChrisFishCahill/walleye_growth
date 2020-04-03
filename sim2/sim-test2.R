@@ -7,6 +7,8 @@ library(INLA)
 library(purrr)
 library(furrr)
 library(dplyr)
+
+#helper functions from http://www.r-inla.org/spde-book
 source("sim2/INLA_helpers.R")
 
 plan(multisession, workers = future::availableCores() / 2)
