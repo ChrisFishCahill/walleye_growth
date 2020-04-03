@@ -8,6 +8,8 @@ library(purrr)
 library(furrr)
 library(dplyr)
 library(fs)
+library(cowplot)
+devtools::install_github("seananderson/ggsidekick")
 
 # helper functions from http://www.r-inla.org/spde-book
 source("sim2/INLA_helpers.R")
@@ -381,18 +383,18 @@ buggered <-
 
 out <- left_join(out, buggered)
 summary(out$failed_iter)
-
-out = out %>% mutate(sim_name = case_when(
-  sim == "sim_1" ~ "rho == 0.1",
-  sim == "sim_2" ~ "rho == 0.5",
-  sim == "sim_3" ~ "rho == 0.9",
-  sim == "sim_4" ~ "kappa == 2.7",
-  sim == "sim_5" ~ "kappa == 0.57",
-  sim == "sim_6" ~ "kappa == 0.28",
-  sim == "sim_7" ~ "sigma[O] == 0.2",
-  sim == "sim_8" ~ "sigma[O] == 0.5",
-  sim == "sim_9" ~ "sigma[O] == 0.8"
-))
+#
+# out = out %>% mutate(sim_name = case_when(
+#   sim == "sim_1" ~ "rho == 0.1",
+#   sim == "sim_2" ~ "rho == 0.5",
+#   sim == "sim_3" ~ "rho == 0.9",
+#   sim == "sim_4" ~ "kappa == 2.7",
+#   sim == "sim_5" ~ "kappa == 0.57",
+#   sim == "sim_6" ~ "kappa == 0.28",
+#   sim == "sim_7" ~ "sigma[O] == 0.2",
+#   sim == "sim_8" ~ "sigma[O] == 0.5",
+#   sim == "sim_9" ~ "sigma[O] == 0.8"
+# ))
 
 types <- tibble(sim = unique(out$sim))
 types$param <- rep(c("rho", "spatial~range", "sigma[O]"), each = 3)
@@ -402,37 +404,6 @@ out <- left_join(out, types, by = "sim")
 out$levels <- factor(out$levels, levels = c("Low", "Medium", "High"))
 out$sig_varies_fitted <- factor(out$sig_varies_fitted, levels = c("by lake", "by time", "both", "ar1 st"))
 out$sig_varies <- factor(out$sig_varies, levels = c("by lake", "by time", "both", "ar1 st"))
-
-plots <- out %>%
-  dplyr::filter(is.na(failed_iter)) %>%
-  dplyr::mutate(Matched = ifelse(sig_varies_fitted == sig_varies, TRUE, FALSE)) %>%
-  group_by(sim_name) %>%
-  nest() %>%
-  mutate(plot = map2(data, sim_name, ~ ggplot(data = .x, aes(sig_varies, exp(ln_global_omega),
-    colour = sig_varies_fitted, fill = Matched
-  )) +
-    geom_boxplot() +
-    geom_hline(yintercept = exp(out[["true_ln_global_omega"]][1])) +
-    xlab(expression(Simulated ~ omega ~ variation)) +
-    labs(colour = expression(Fitted ~ omega ~ variation)) +
-    scale_color_brewer(palette = "Dark2") +
-    scale_fill_manual(values = c("white", "grey60")) +
-    ylab(expression(omega[0])) +
-    ylim(exp(min(na.exclude(out$ln_global_omega))),
-      exp(max(na.exclude(out$ln_global_omega)))) +
-    theme(plot.title = element_text(hjust = 0.5)) +
-    annotate("text", x="by lake", y=47, label=sim_name, parse=T,
-      size=7)
-    ))
-
-plots$plot[[9]]
-
-pdf("sim2/simulations.pdf", width=7, height=5)
-plots$plot
-dev.off()
-
-cowplot::plot_grid(plotlist = plots$plot)
-ggsave("sim2/simulations-plot-grid.pdf", width = 14, height = 12)
 
 true_omega <- exp(out$true_ln_global_omega)[1]
 g <- out %>%
@@ -509,6 +480,36 @@ g <- plot_dat %>% ggplot(aes(x = sig_varies, y = exp(med),
   scale_y_log10(breaks = seq(8, 36, 2))
 ggsave("sim2/simulations-facet-grid-pointrange.pdf", width = 8, height = 5)
 
+# plots <- out %>%
+#   dplyr::filter(is.na(failed_iter)) %>%
+#   dplyr::mutate(Matched = ifelse(sig_varies_fitted == sig_varies, TRUE, FALSE)) %>%
+#   group_by(sim_name) %>%
+#   nest() %>%
+#   mutate(plot = map2(data, sim_name, ~ ggplot(data = .x, aes(sig_varies, exp(ln_global_omega),
+#     colour = sig_varies_fitted, fill = Matched
+#   )) +
+#     geom_boxplot() +
+#     geom_hline(yintercept = exp(out[["true_ln_global_omega"]][1])) +
+#     xlab(expression(Simulated ~ omega ~ variation)) +
+#     labs(colour = expression(Fitted ~ omega ~ variation)) +
+#     scale_color_brewer(palette = "Dark2") +
+#     scale_fill_manual(values = c("white", "grey60")) +
+#     ylab(expression(omega[0])) +
+#     ylim(exp(min(na.exclude(out$ln_global_omega))),
+#       exp(max(na.exclude(out$ln_global_omega)))) +
+#     theme(plot.title = element_text(hjust = 0.5)) +
+#     annotate("text", x="by lake", y=47, label=sim_name, parse=T,
+#       size=7)
+#     ))
+#
+# plots$plot[[9]]
+#
+# pdf("sim2/simulations.pdf", width=7, height=5)
+# plots$plot
+# dev.off()
+
+# cowplot::plot_grid(plotlist = plots$plot)
+# ggsave("sim2/simulations-plot-grid.pdf", width = 14, height = 12)
 
 # out %>%
 #   dplyr::filter(!(iter %in% whichSims)) %>%
