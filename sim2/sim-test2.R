@@ -280,7 +280,6 @@ fit_sim <- function(Nyears = 10, Nlakes = 15, Nfish = 20,
 # out <- furrr::future_pmap_dfr(totest, fit_sim,
 # .options = future_options(seed = 123L) #for testing parallel
 
-
 # Visualize the priors (penalties) for ar1 st model:
 tau_O_mean_prior <- 0
 tau_O_sd_prior <- 3
