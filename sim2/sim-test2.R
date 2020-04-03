@@ -361,7 +361,7 @@ if (FALSE) {
 # Map through directory, load sim.rds files, make dope plots
 #-------------------------------------------------------------
 
-paths <- fs::dir_ls("sim2/", glob = "*.rds")
+paths <- fs::dir_ls("sim2/", regexp = "^sim2/sim_[0-9]+.rds$")
 out <- purrr::map_dfr(paths, readRDS, .id = "sim")
 
 out <- out %>%
