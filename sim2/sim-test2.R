@@ -371,40 +371,20 @@ out <- out %>% rowwise() %>%
 buggered <-
   out %>% group_by(sim) %>%
   filter(convergence==1L) %>%
-  distinct(iter)
-
-#Trying to figure out how to match/filter out values in out corresponding to buggered rows
-dplyr::bind_cols(out, buggered)
-
-out
-#%>% rename(failed_iter = iter) %>% spread(sim)
-
-check = nest_join(out, buggered, by=c("sim"="sim", "iter"="failed_iter"))
-summary(check$buggered)
-
-
-%>% rename(failed_iter = iter)
-
-out %>% filter
-full_join(out, buggered, by="sim")
-buggered %>% merge(out)
-df = pd.merge(out,buggered.drop_duplicates())
-
-which(out$iter==2  out$sim=="sim_1")
-
-out
-which_iter <- buggered$iter
-which_sim <- buggered$sim
-
-#I suck at dplyr / tidy
+  distinct(iter) %>%
+  mutate(failed_iter = iter)
 
 #percent of simulations that failed to converge:
 100*(table(buggered$sim)/300)
+
+out = left_join(out, buggered)
+summary(out$failed_iter)
 
 out$sig_varies_fitted <- factor(out$sig_varies_fitted, levels = c("by lake", "by time", "both", "ar1 st"))
 out$sig_varies <- factor(out$sig_varies, levels = c("by lake", "by time", "both", "ar1 st"))
 
 plots <- out %>%
+  dplyr::filter(is.na(failed_iter)) %>%
   dplyr::mutate(Matched = ifelse(sig_varies_fitted == sig_varies, TRUE, FALSE)) %>%
   group_by(sim) %>%
   nest() %>%
