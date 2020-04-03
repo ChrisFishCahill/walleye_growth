@@ -7,6 +7,7 @@ library(INLA)
 library(purrr)
 library(furrr)
 library(dplyr)
+library(fs)
 
 #helper functions from http://www.r-inla.org/spde-book
 source("sim2/INLA_helpers.R")
@@ -328,8 +329,6 @@ pars_to_sim <- pars_to_sim %>%
     sim = seq_len(nrow(pars_to_sim))
   )
 
-pars_to_sim
-
 run_sim_experiment <- function(rho = rho, kappa = kappa,
                                SigO = SigO, seed = seed,
                                sim = sim) {
@@ -353,7 +352,88 @@ totest <- tidyr::expand_grid(
 
 if (FALSE) {
   system.time({
-    # 4.73 hrs on Cahill's desktop
+    #4.73 hrs on Cahill's desktop
     purrr::pwalk(pars_to_sim, run_sim_experiment)
   })
 }
+
+#-------------------------------------------------------------
+#Map through directory, load sim.rds files, make dope plots
+#-------------------------------------------------------------
+
+paths <- fs::dir_ls("sim2/", glob="*.rds")
+out <- purrr::map_dfr(paths, readRDS, .id="sim")
+
+out <- out %>% rowwise() %>%
+  mutate(sim =  strsplit(sim,"/")[[1]][2]) %>%
+  mutate(sim = strsplit(sim,".r")[[1]][1])
+
+buggered <-
+  out %>% group_by(sim) %>%
+  filter(convergence==1L) %>%
+  distinct(iter)
+
+#Trying to figure out how to match/filter out values in out corresponding to buggered rows
+dplyr::bind_cols(out, buggered)
+
+out
+#%>% rename(failed_iter = iter) %>% spread(sim)
+
+check = nest_join(out, buggered, by=c("sim"="sim", "iter"="failed_iter"))
+summary(check$buggered)
+
+
+%>% rename(failed_iter = iter)
+
+out %>% filter
+full_join(out, buggered, by="sim")
+buggered %>% merge(out)
+df = pd.merge(out,buggered.drop_duplicates())
+
+which(out$iter==2  out$sim=="sim_1")
+
+out
+which_iter <- buggered$iter
+which_sim <- buggered$sim
+
+#I suck at dplyr / tidy
+
+#percent of simulations that failed to converge:
+100*(table(buggered$sim)/300)
+
+out$sig_varies_fitted <- factor(out$sig_varies_fitted, levels = c("by lake", "by time", "both", "ar1 st"))
+out$sig_varies <- factor(out$sig_varies, levels = c("by lake", "by time", "both", "ar1 st"))
+
+plots <- out %>%
+  dplyr::mutate(Matched = ifelse(sig_varies_fitted == sig_varies, TRUE, FALSE)) %>%
+  group_by(sim) %>%
+  nest() %>%
+  mutate(plot = map2(data, sim, ~ggplot(data = .x, aes(sig_varies, exp(ln_global_omega),
+    colour = sig_varies_fitted, fill = Matched)) +
+  geom_boxplot() +
+  geom_hline(yintercept = exp(out[["true_ln_global_omega"]][1])) +
+  xlab(expression(Simulated ~ omega ~ variation)) +
+  labs(colour = expression(Fitted ~ omega ~ variation)) +
+  scale_color_brewer(palette = "Dark2") +
+  scale_fill_manual(values = c("white", "grey60")) +
+  ylab(expression(omega[0]))))
+
+plots
+
+map2(paste0("sim2/", unique(df$sim),"_boxplot", ".pdf"), plots$plot, ggsave,  width = 7, height = 5)
+
+out %>%
+  dplyr::filter(!(iter %in% whichSims)) %>%
+  dplyr::mutate(sig_varies = paste0("Sim = ", sig_varies)) %>%
+  dplyr::mutate(sig_varies_fitted = paste0("Fitted = ", sig_varies_fitted)) %>%
+  ggplot(aes(ln_global_omega)) +
+  geom_histogram(bins = 30) +
+  geom_vline(xintercept = out[["true_ln_global_omega"]][1]) +
+  facet_grid(sig_varies_fitted ~ sig_varies) +
+  xlab(expression(omega)) +
+  ylab("Count")
+ggsave("sim2/hist-sim.pdf", width = 7, height = 5)
+
+
+
+
