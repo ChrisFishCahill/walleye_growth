@@ -9,7 +9,7 @@ library(furrr)
 library(dplyr)
 library(fs)
 
-#helper functions from http://www.r-inla.org/spde-book
+# helper functions from http://www.r-inla.org/spde-book
 source("sim2/INLA_helpers.R")
 
 plan(multisession, workers = future::availableCores() / 2)
@@ -352,33 +352,47 @@ totest <- tidyr::expand_grid(
 
 if (FALSE) {
   system.time({
-    #4.73 hrs on Cahill's desktop
+    # 4.73 hrs on Cahill's desktop
     purrr::pwalk(pars_to_sim, run_sim_experiment)
   })
 }
 
 #-------------------------------------------------------------
-#Map through directory, load sim.rds files, make dope plots
+# Map through directory, load sim.rds files, make dope plots
 #-------------------------------------------------------------
 
-paths <- fs::dir_ls("sim2/", glob="*.rds")
-out <- purrr::map_dfr(paths, readRDS, .id="sim")
+paths <- fs::dir_ls("sim2/", glob = "*.rds")
+out <- purrr::map_dfr(paths, readRDS, .id = "sim")
 
-out <- out %>% rowwise() %>%
-  mutate(sim =  strsplit(sim,"/")[[1]][2]) %>%
-  mutate(sim = strsplit(sim,".r")[[1]][1])
+out <- out %>%
+  rowwise() %>%
+  mutate(sim = strsplit(sim, "/")[[1]][2]) %>%
+  mutate(sim = strsplit(sim, ".r")[[1]][1])
 
 buggered <-
-  out %>% group_by(sim) %>%
-  filter(convergence==1L) %>%
+  out %>%
+  group_by(sim) %>%
+  filter(convergence == 1L) %>%
   distinct(iter) %>%
   mutate(failed_iter = iter)
 
-#percent of simulations that failed to converge:
-100*(table(buggered$sim)/300)
+# percent of simulations that failed to converge:
+100 * (table(buggered$sim) / 300)
 
-out = left_join(out, buggered)
+out <- left_join(out, buggered)
 summary(out$failed_iter)
+
+out = out %>% mutate(sim_name = case_when(
+  sim == "sim_1" ~ "rho == 0.1",
+  sim == "sim_2" ~ "rho == 0.5",
+  sim == "sim_3" ~ "rho == 0.9",
+  sim == "sim_4" ~ "kappa == 2.7",
+  sim == "sim_5" ~ "kappa == 0.57",
+  sim == "sim_6" ~ "kappa == 0.28",
+  sim == "sim_7" ~ "sigma[O] == 0.2",
+  sim == "sim_8" ~ "sigma[O] == 0.5",
+  sim == "sim_9" ~ "sigma[O] == 0.8"
+))
 
 out$sig_varies_fitted <- factor(out$sig_varies_fitted, levels = c("by lake", "by time", "both", "ar1 st"))
 out$sig_varies <- factor(out$sig_varies, levels = c("by lake", "by time", "both", "ar1 st"))
@@ -386,34 +400,41 @@ out$sig_varies <- factor(out$sig_varies, levels = c("by lake", "by time", "both"
 plots <- out %>%
   dplyr::filter(is.na(failed_iter)) %>%
   dplyr::mutate(Matched = ifelse(sig_varies_fitted == sig_varies, TRUE, FALSE)) %>%
-  group_by(sim) %>%
+  group_by(sim_name) %>%
   nest() %>%
-  mutate(plot = map2(data, sim, ~ggplot(data = .x, aes(sig_varies, exp(ln_global_omega),
-    colour = sig_varies_fitted, fill = Matched)) +
-  geom_boxplot() +
-  geom_hline(yintercept = exp(out[["true_ln_global_omega"]][1])) +
-  xlab(expression(Simulated ~ omega ~ variation)) +
-  labs(colour = expression(Fitted ~ omega ~ variation)) +
-  scale_color_brewer(palette = "Dark2") +
-  scale_fill_manual(values = c("white", "grey60")) +
-  ylab(expression(omega[0]))))
+  mutate(plot = map2(data, sim_name, ~ ggplot(data = .x, aes(sig_varies, exp(ln_global_omega),
+    colour = sig_varies_fitted, fill = Matched
+  )) +
+    geom_boxplot() +
+    geom_hline(yintercept = exp(out[["true_ln_global_omega"]][1])) +
+    xlab(expression(Simulated ~ omega ~ variation)) +
+    labs(colour = expression(Fitted ~ omega ~ variation)) +
+    scale_color_brewer(palette = "Dark2") +
+    scale_fill_manual(values = c("white", "grey60")) +
+    ylab(expression(omega[0])) +
+    ylim(exp(min(na.exclude(out$ln_global_omega))),
+      exp(max(na.exclude(out$ln_global_omega)))) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    annotate("text", x="by lake", y=47, label=sim_name, parse=T,
+      size=7)
+    ))
 
-plots
+plots$plot[[9]]
 
-map2(paste0("sim2/", unique(df$sim),"_boxplot", ".pdf"), plots$plot, ggsave,  width = 7, height = 5)
-
-out %>%
-  dplyr::filter(!(iter %in% whichSims)) %>%
-  dplyr::mutate(sig_varies = paste0("Sim = ", sig_varies)) %>%
-  dplyr::mutate(sig_varies_fitted = paste0("Fitted = ", sig_varies_fitted)) %>%
-  ggplot(aes(ln_global_omega)) +
-  geom_histogram(bins = 30) +
-  geom_vline(xintercept = out[["true_ln_global_omega"]][1]) +
-  facet_grid(sig_varies_fitted ~ sig_varies) +
-  xlab(expression(omega)) +
-  ylab("Count")
-ggsave("sim2/hist-sim.pdf", width = 7, height = 5)
+pdf("sim2/simulations.pdf", width=7, height=5)
+plots$plot
+dev.off()
 
 
 
-
+# out %>%
+#   dplyr::filter(!(iter %in% whichSims)) %>%
+#   dplyr::mutate(sig_varies = paste0("Sim = ", sig_varies)) %>%
+#   dplyr::mutate(sig_varies_fitted = paste0("Fitted = ", sig_varies_fitted)) %>%
+#   ggplot(aes(ln_global_omega)) +
+#   geom_histogram(bins = 30) +
+#   geom_vline(xintercept = out[["true_ln_global_omega"]][1]) +
+#   facet_grid(sig_varies_fitted ~ sig_varies) +
+#   xlab(expression(omega)) +
+#   ylab("Count")
+# ggsave("sim2/hist-sim.pdf", width = 7, height = 5)
