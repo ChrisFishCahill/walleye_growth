@@ -55,6 +55,8 @@ sum(data$FL < 4.0)
 data <- data[which(data$FL > 4.0),]
 data <- data[which(data$FL  < 80), ]
 nrow(data)
+#saveRDS(data, "C:/Users/Chris Cahill/Documents/GitHub/walleye_growth/analysis/vB_analysis_august_2019_cahill.rds")
+
 #-------------------------------------------------------------------------------------------------------------------
 
 AICs <- data.frame(Model=c("Normal_Nonspatial", "Normal_Nonspatial_Reduced",
