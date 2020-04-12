@@ -141,10 +141,6 @@ ar1$obj$report()
 #some alain zuur stuff here and make a pretty table
 #Model, Number of parameters, Objective, AIC
 
-
-# intercept terms are more or less what we might expect from the simulation
-wut = sdreport(ar1$obj)
-
 str(ar1$obj$report())
 
 ar1$AIC
