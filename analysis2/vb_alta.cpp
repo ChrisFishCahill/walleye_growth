@@ -87,8 +87,8 @@ Type objective_function<Type>::operator()()
   }
 
   for (int t = 0; t < eps_omega_time.size(); t++) {
-          if (CppAD::Variable(eps_omega_time(t)))
-            jnll -= dnorm(eps_omega_time(t), Type(0.0), exp(ln_sd_omega_time), true);
+    if (CppAD::Variable(eps_omega_time(t)))
+      jnll -= dnorm(eps_omega_time(t), Type(0.0), exp(ln_sd_omega_time), true);
   }
 
   // Derived quantities
