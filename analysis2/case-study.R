@@ -8,7 +8,7 @@ library(purrr)
 library(furrr)
 library(dplyr)
 library(TMBhelper)
-
+plan(multisession, workers = future::availableCores() / 2)
 data <- readRDS("analysis2/vB_analysis_august_2019_cahill.rds")
 TMB::compile("analysis2/vb_alta.cpp")
 
@@ -24,11 +24,11 @@ points(Loc, col = "Steelblue", pch = 1)
 spde <- INLA::inla.spde2.matern(mesh, alpha = 2)
 spdeMatrices <- spde$param.inla[c("M0", "M1", "M2")]
 
-get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.05, omega_global = 15,
-                    rho = 0, kappa = 10.0,
+get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.3, omega_global = 15,
+                    rho = 0.9, kappa = 0.9,
                     sig_varies_fitted = c("fixed", "by lake", "by time", "both", "ar1 st"),
                     silent = TRUE, Partition_i = rep(0, nrow(data)),
-                    REML = 1L) {
+                    REML = TRUE, ...) {
   sig_varies_fitted <- match.arg(sig_varies_fitted)
   cat(
     crayon::green(
@@ -117,33 +117,46 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.05, omega_global = 15
   opt <- nlminb(obj$par, obj$fn, obj$gr,
     eval.max = 1000, iter.max = 1000
   )
-  rep <- TMB::sdreport(obj, bias.correct=TRUE)
+  rep <- TMB::sdreport(obj, bias.correct = TRUE)
   final_gradient <- obj$gr(opt$par)
   if (any(abs(final_gradient) > 0.01) || rep$pdHess == FALSE) {
-    browser()
     opt$convergence <- 1L
+  }
+  if (opt$convergence == 1L) {
+    cat(
+      crayon::red(
+        clisymbols::symbol$cross
+      ),
+      "Model did not converge: check results"
+    )
   }
   AIC <- (2 * length(opt$par) - 2 * (-opt$objective))
   list(opt = opt, rep = rep, AIC = AIC, obj = obj)
 }
 
 # Testing:
-by_lake <- get_fit(sig_varies_fitted = "by lake", cv = 0.15, SigO = 0.5, silent = F)
-by_time <- get_fit(sig_varies_fitted = "by time", cv = 0.15, SigO = 2.0, silent = F)
-both <- get_fit(sig_varies_fitted = "both", cv = 0.5, SigO = 1.38, silent = F)
-ar1 <- get_fit(sig_varies_fitted = "ar1 st", SigO = 1.38, cv = 0.05, kappa = 0.05371844, silent = F)
+# get_fit(sig_varies_fitted = "by lake", silent = F)
+# get_fit(sig_varies_fitted = "by time", silent = F)
+# get_fit(sig_varies_fitted = "both", silent = F)
+# get_fit(sig_varies_fitted = "ar1 st", silent = F)
 
-by_lake$rep$value
-ar1$obj$report()
-ar1$obj$report()
+tofit <- dplyr::tibble(
+  sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
+)
 
-#TODO: why is adreport broken
-#some alain zuur stuff here and make a pretty table
-#Model, Number of parameters, Objective, AIC
+# system.time({
+#   out <- purrr::pmap(tofit, get_fit, silent = F) %>%
+#                                 setNames( c("by lake", "by time", "both", "ar1 st"))
+# })
 
-str(ar1$obj$report())
+system.time({
+  out <- furrr::future_pmap(tofit, get_fit,
+    .options = future_options(seed = 123L), silent = TRUE
+  ) %>%
+    setNames(c("by lake", "by time", "both", "ar1 st")) # for testing parallel
+})
 
-ar1$AIC
-by_lake$AIC
-by_time$AIC
-both$AIC
+out$`by lake`$AIC
+out$`by time`$AIC
+out$`both`$AIC
+out$`ar1 st`$AIC
