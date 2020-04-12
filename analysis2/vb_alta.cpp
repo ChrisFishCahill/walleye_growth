@@ -81,8 +81,8 @@ Type objective_function<Type>::operator()()
   for (int l = 0; l < Nlakes; l++) {
     jnll -= dnorm(eps_linf(l), Type(0.0), exp(ln_sd_linf), true);
     jnll -= dnorm(eps_t0(l), Type(0.0), exp(ln_sd_tzero), true);
-     if (CppAD::Variable(eps_omega_lake(l)))
-       jnll -= dnorm(eps_omega_lake(l), Type(0.0), exp(ln_sd_omega_lake), true);
+    if (CppAD::Variable(eps_omega_lake(l)))
+      jnll -= dnorm(eps_omega_lake(l), Type(0.0), exp(ln_sd_omega_lake), true);
   }
 
   for (int t = 0; t < eps_omega_time.size(); t++) {
