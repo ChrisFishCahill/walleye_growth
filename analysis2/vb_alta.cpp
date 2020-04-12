@@ -49,11 +49,10 @@ Type objective_function<Type>::operator()()
   PARAMETER(ln_b_sex);
   PARAMETER_VECTOR(b_j_omega);
 
+  // Random effect stuff
   PARAMETER(ln_sd_omega_lake);
-  PARAMETER(ln_sd_omega_time);
-
-  // Random coefficients
   PARAMETER_VECTOR(eps_omega_lake);
+  PARAMETER(ln_sd_omega_time);
   PARAMETER_VECTOR(eps_omega_time);
   PARAMETER_VECTOR(eps_linf);
   PARAMETER_VECTOR(eps_t0);
@@ -91,14 +90,14 @@ Type objective_function<Type>::operator()()
       jnll -= dnorm(eps_omega_time(t), Type(0.0), exp(ln_sd_omega_time), true);
   }
 
-  // Derived quantities
+  // Derived variables
   Type Range = sqrt(8) / exp(ln_kappa);
   Type SigO = 1 / sqrt(4 * M_PI * exp(2*ln_tau_O) * exp(2*ln_kappa));
 
-  SparseMatrix<Type> Q = R_inla::Q_spde(spdeMatrices, exp(ln_kappa));
-
-  if (CppAD::Variable(ln_tau_O))
+  if (CppAD::Variable(ln_tau_O)){
+    SparseMatrix<Type> Q = R_inla::Q_spde(spdeMatrices, exp(ln_kappa));
     jnll += SCALE(SEPARABLE(AR1(rho), GMRF(Q)), 1.0 / exp(ln_tau_O))(eps_omega_st);
+  }
 
   // calculate fixed effects for omega:
   vector<Type> eta_fixed_i = X_ij_omega * b_j_omega;
@@ -125,8 +124,9 @@ Type objective_function<Type>::operator()()
     if( predTF_i(i)==0 ) jnll += jnll_i(i); //estimation
     if( predTF_i(i)==1 ) pred_jnll += jnll_i(i); //prediction
   }
-  REPORT(Range);
-  REPORT(SigO);
+
+  ADREPORT(Range);
+  ADREPORT(SigO);
   REPORT(rho);
   REPORT(pred_jnll);
   return jnll;
