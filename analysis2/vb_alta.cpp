@@ -39,11 +39,6 @@ Type objective_function<Type>::operator()()
   DATA_STRUCT(spdeMatrices, spde_t);   // SPDE objects
   DATA_VECTOR(predTF_i);               // Indicator for CV fold
 
-  DATA_SCALAR(rho_sd_prior);           // rho SD prior
-  DATA_SCALAR(rho_mean_prior);         // rho mean prior
-  DATA_SCALAR(tau_O_sd_prior);         // tau_O_ SD prior
-  DATA_SCALAR(tau_O_mean_prior);       // tau_O_ mean prior
-
   // Parameters
   PARAMETER(ln_global_linf);
   PARAMETER(ln_sd_linf);
@@ -76,7 +71,12 @@ Type objective_function<Type>::operator()()
   Type rho = Type(2)*invlogit(rho_unscaled)-Type(1);
 
   vector<Type> length_pred(Nobs);
+  // Objective function
   Type jnll = 0;
+  Type pred_jnll=0;
+
+  vector<Type> jnll_i(Nobs);
+  jnll_i.setZero();
 
   // Probability of random coefficients:
   for (int l = 0; l < Nlakes; l++) {
@@ -94,10 +94,6 @@ Type objective_function<Type>::operator()()
 
   SparseMatrix<Type> Q = R_inla::Q_spde(spdeMatrices, exp(ln_kappa));
   jnll += SCALE(SEPARABLE(AR1(rho), GMRF(Q)), 1.0 / exp(ln_tau_O))(eps_omega_st);
-
-  // penalties:
-  jnll -= dnorm(rho, rho_mean_prior, rho_sd_prior, true);
-  jnll -= dnorm(ln_tau_O, tau_O_mean_prior, tau_O_sd_prior, true);
 
   // calculate fixed effects for omega:
   vector<Type> eta_fixed_i = X_ij_omega * b_j_omega;
@@ -117,12 +113,17 @@ Type objective_function<Type>::operator()()
 
     length_pred(i) = linf * (1 - exp(-(omega / linf) * (age_i(i) - t0)));
 
-    if (!isNA(length_i(i)))
-      jnll -= dlnorm(length_i(i), log(length_pred(i)), exp(ln_cv), true);
+    if (!isNA(length_i(i))){
+      jnll_i(i) -= dlnorm(length_i(i), log(length_pred(i)), exp(ln_cv), true);
+    }
+    // Running counter
+    if( predTF_i(i)==0 ) jnll += jnll_i(i); //estimation
+    if( predTF_i(i)==1 ) pred_jnll += jnll_i(i); //prediction
   }
   REPORT(Range);
   REPORT(SigO);
   REPORT(rho);
+  REPORT(pred_jnll);
   return jnll;
 }
 

@@ -112,7 +112,7 @@ Type objective_function<Type>::operator()()
     if (!isNA(length_i(i)))
       jnll -= dlnorm(length_i(i), log(length_pred(i)), exp(ln_cv), true);
   }
+  ADREPORT(Range);
+  ADREPORT(SigO);
   return jnll;
-  ADREPORT(Range)
-  ADREPORT(SigO)
 }

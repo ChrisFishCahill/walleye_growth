@@ -14,10 +14,8 @@ TMB::compile("analysis2/vb_alta.cpp")
 
 Loc <- unique(data[, c("X_TTM_c", "Y_TTM_c")]) / 1000 # Put distance in kms
 
-# mesh = inla.mesh.2d(loc=loc_xy, max.edge=c(62,1000)) #Better mesh, but slower
+# mesh = inla.mesh.2d(loc=Loc, max.edge=c(62,1000)) #Better mesh, but slower
 mesh <- inla.mesh.create(Loc, refine = TRUE, extend = -0.5, cutoff = 0.01) # faster mesh
-
-mesh$n
 
 # png(file="Mesh.png",width=9.50,height=7.00,units="in",res=600)
 plot(mesh)
@@ -27,11 +25,10 @@ spde <- INLA::inla.spde2.matern(mesh, alpha = 2)
 spdeMatrices <- spde$param.inla[c("M0", "M1", "M2")]
 
 get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.05, omega_global = 15,
-                     rho = 0.5, kappa = 3.0,
+                     rho = 0, kappa = 10.0,
                      sig_varies_fitted = c("fixed", "by lake", "by time", "both", "ar1 st"),
-                     iter = NA, silent = TRUE,
-                     rho_sd_prior = 2, rho_mean_prior = 0,
-                     tau_O_mean_prior = 0, tau_O_sd_prior = 3) {
+                     silent = TRUE,
+                     REML=1L) {
   sig_varies_fitted <- match.arg(sig_varies_fitted)
   cat(
     crayon::green(
@@ -54,20 +51,16 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.05, omega_global = 15
     X_ij_omega = model.matrix(~ 1 + data$wallEffDen.Std + data$compEffDen.Std +
       data$GDD.Std + data$wallEffDen.Std:data$compEffDen.Std),
     spdeMatrices = spdeMatrices,
-    predTF_i = Partition_i,
-    rho_sd_prior = rho_sd_prior,
-    rho_mean_prior = rho_mean_prior,
-    tau_O_mean_prior = tau_O_mean_prior,
-    tau_O_sd_prior = tau_O_sd_prior
+    predTF_i = Partition_i
   )
 
   parameters <- list(
     ln_global_linf = log(Linf),
-    ln_sd_linf = -2.05361277,
+    ln_sd_linf = 0,
     global_tzero = T0,
     ln_sd_tzero = 0,
-    ln_b_sex = 1,
-    b_j_omega = rep(1, ncol(data$X_ij_omega)),
+    ln_b_sex = 0,
+    b_j_omega = rep(0, ncol(data$X_ij_omega)),
     ln_sd_omega_lake = 0,
     ln_sd_omega_time = 0,
     eps_omega_lake = rep(0, data$Nlakes),
@@ -78,7 +71,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.05, omega_global = 15
     ln_cv = log(cv),
     ln_kappa = log(kappa),
     ln_tau_O = log(SigO),
-    rho_unscaled = 3
+    rho_unscaled = qlogis((rho + 1) / 2)
   )
   map <- list()
   if (sig_varies_fitted %in% c("fixed", "by lake", "ar1 st")) {
@@ -101,6 +94,14 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.05, omega_global = 15
       ln_tau_O = factor(NA)
     ))
   }
+
+  random = c("eps_omega_lake", "eps_omega_time", "eps_omega_st", "eps_linf", "eps_t0")
+  if( REML==TRUE ){
+  random = union( random, c("b_j_omega",
+                            "ln_global_linf",
+                            "global_tzero",
+                            "ln_b_sex") )
+}
   if (!"vb_alta" %in% names(getLoadedDLLs())) {
     cat(crayon::blue(clisymbols::symbol$star), "Loading DLL\n")
     dyn.load(dynlib("analysis2/vb_alta"))
@@ -108,7 +109,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.05, omega_global = 15
 
   obj <- TMB::MakeADFun(data, parameters,
     DLL = "vb_alta",
-    random = c("eps_omega_lake", "eps_omega_time", "eps_omega_st", "eps_linf", "eps_t0"),
+    random = random,
     map = map,
     silent=silent
   )
@@ -117,97 +118,35 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.05, omega_global = 15
     eval.max = 1000, iter.max = 1000
   )
   rep <- TMB::sdreport(obj)
+  convergence = 0L
   final_gradient = obj$gr( opt$par )
-  #if( any(abs(final_gradient)>0.01) | rep$pdHess==FALSE ) {
-    #browser()
-    #opt$par[which(abs(final_gradient)>0.01)]
-    #rep$pdHess
-   # } #stop("Not converged")
-  rep
+  if( any(abs(final_gradient)>0.01) | rep$pdHess==FALSE ) {
+    convergence = 1L
+   }
+  AIC <- (2 * length(opt$par) - 2 *(-opt$objective) )
+  list(opt = opt, rep = rep, AIC = AIC, obj=obj, convergence=convergence)
 }
 
-by_lake = get_fit(sig_varies_fitted = "by lake", silent=F)
-by_time = get_fit(sig_varies_fitted = "by time", silent=F)
-both = get_fit(sig_varies_fitted = "both", silent=F)
-ar1 = get_fit(sig_varies_fitted = "ar1 st", silent=F)
+#Testing:
+by_lake = get_fit(sig_varies_fitted = "by lake", cv=0.15, SigO=0.5, silent=F)
+by_time = get_fit(sig_varies_fitted = "by time", cv=0.15, SigO=2.0, silent=F)
+both = get_fit(sig_varies_fitted = "both", cv=0.15, SigO=1.0, silent=F)
+ar1 = get_fit(sig_varies_fitted = "ar1 st", SigO=1.38, cv=0.06946078, kappa=0.05371844, silent=F)
 
-# rep$pdHess
-#
-# final_gradient = obj$gr( opt$par )
-# if( any(abs(final_gradient)>0.01) | rep$pdHess==FALSE ) stop("Not converged")
-#
-#
-#
-# opt$par[which(abs(final_gradient)>0.01)]
-#
-#   map <- list(
-#     #ln_sd_tzero = factor(NA),
-#     ln_sd_linf = factor(NA),
-#     eps_linf = as.factor(rep(NA, data$Nlakes))
-#     #eps_t0 = as.factor(rep(NA, data$Nlakes))
-#   )
-#
-# map <- c(map, list(
-#   eps_omega_time = as.factor(rep(NA, length(unique(data$time_i)))),
-#   ln_sd_omega_time = factor(NA),
-#   eps_omega_lake = as.factor(rep(NA, data$Nlakes)),
-#   ln_sd_omega_lake = factor(NA)
-# ))
-# map <- c(map, map$rho_unscaled = factor(NA))
-# map <- map$rho_unscaled <- factor(NA)
-# map
-#
-# obj <- TMB::MakeADFun(data, parameters,
-#   DLL = "vb_alta",
-#   random = c("eps_omega_st", "eps_linf", "eps_t0"), # "eps_omega_lake", "eps_omega_time",
-#   map = map
-# )
-#
-# opt <- nlminb(obj$par, obj$fn, obj$gr,
-#   eval.max = 1000, iter.max = 1000
-# )
-#
-# rep <- TMB::sdreport(obj)
-# rep$pdHess
-#
-# final_gradient = obj$gr( opt$par )
-# if( any(abs(final_gradient)>0.01) | rep$pdHess==FALSE ) stop("Not converged")
-#
-#
-# parameters$rho_unscaled <- qlogis((0.99 + 1) / 2)
-#
-#
-#
-#
-#
-# opt
-#
-# str(rep)
-#
-# obj$report()
-#
-# r <- obj$report()
-#
-# str(opt)
-# str(obj)
-#
-#
-#
-# summary(rep, select = "report")
-# as.list(rep, what = "Std. Error")
-#
-#
-# str(rep)
-#
-# obj$report(obj$env$last.par.best)
-#
-#
-# opt <- TMBhelper::fit_tmb(
-#   obj = obj,
-#   control = list(eval.max = 1000, iter.max = 1000),
-#   getsd = T, newtonsteps = 1, bias.correct = T
-# )
-# SD <- sdreport(obj_spatial)
-#
-# AIC <- c(-2 * -opt$objective + 2 * length(opt$par))
-# # 191947.4
+by_time$opt$objective
+ar1$opt$objective
+by_lake$opt$objective
+both$opt$objective
+
+by_lake$rep$par.random[1:10] #2.61211890
+by_time$rep$par.random[1:10] #2.56895556
+both$rep$par.random[1:10]    #2.59726063
+ar1$rep$par.random[1:10]     #2.66
+
+#intercept terms are more or less what we might expect from the simulation
+
+ar1$obj$report()
+ar1$AIC
+by_lake$AIC
+by_time$AIC
+both$AIC
