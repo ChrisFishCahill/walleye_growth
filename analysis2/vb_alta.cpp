@@ -82,10 +82,13 @@ Type objective_function<Type>::operator()()
   for (int l = 0; l < Nlakes; l++) {
     jnll -= dnorm(eps_linf(l), Type(0.0), exp(ln_sd_linf), true);
     jnll -= dnorm(eps_t0(l), Type(0.0), exp(ln_sd_tzero), true);
-    jnll -= dnorm(eps_omega_lake(l), Type(0.0), exp(ln_sd_omega_lake), true);
+     if (CppAD::Variable(eps_omega_lake(l)))
+       jnll -= dnorm(eps_omega_lake(l), Type(0.0), exp(ln_sd_omega_lake), true);
   }
+
   for (int t = 0; t < eps_omega_time.size(); t++) {
-     jnll -= dnorm(eps_omega_time(t), Type(0.0), exp(ln_sd_omega_time), true);
+          if (CppAD::Variable(eps_omega_time(t)))
+            jnll -= dnorm(eps_omega_time(t), Type(0.0), exp(ln_sd_omega_time), true);
   }
 
   // Derived quantities
@@ -93,7 +96,9 @@ Type objective_function<Type>::operator()()
   Type SigO = 1 / sqrt(4 * M_PI * exp(2*ln_tau_O) * exp(2*ln_kappa));
 
   SparseMatrix<Type> Q = R_inla::Q_spde(spdeMatrices, exp(ln_kappa));
-  jnll += SCALE(SEPARABLE(AR1(rho), GMRF(Q)), 1.0 / exp(ln_tau_O))(eps_omega_st);
+
+  if (CppAD::Variable(ln_tau_O))
+    jnll += SCALE(SEPARABLE(AR1(rho), GMRF(Q)), 1.0 / exp(ln_tau_O))(eps_omega_st);
 
   // calculate fixed effects for omega:
   vector<Type> eta_fixed_i = X_ij_omega * b_j_omega;
