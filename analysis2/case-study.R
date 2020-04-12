@@ -120,7 +120,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.05, omega_global = 15
   rep <- TMB::sdreport(obj)
   convergence = 0L
   final_gradient = obj$gr( opt$par )
-  if( any(abs(final_gradient)>0.01) | rep$pdHess==FALSE ) {
+  if( any(abs(final_gradient)>0.01) || rep$pdHess==FALSE ) {
     convergence = 1L
    }
   AIC <- (2 * length(opt$par) - 2 *(-opt$objective) )
