@@ -59,7 +59,7 @@ Type objective_function<Type>::operator()()
   PARAMETER_ARRAY(eps_omega_st);
 
   // Likelihood noise term
-  PARAMETER(ln_cv);
+  PARAMETER(log_sd);
 
   // Spatial-temporal terms
   PARAMETER(ln_kappa);     //matern kappa
@@ -120,7 +120,7 @@ Type objective_function<Type>::operator()()
     length_pred(i) = linf * (1 - exp(-(omega_i(i) / linf) * (age_i(i) - t0)));
 
     if (!isNA(length_i(i))){
-      jnll_i(i) -= dlnorm(length_i(i), log(length_pred(i)), exp(ln_cv), true);
+      jnll_i(i) -= dlnorm(length_i(i), log(length_pred(i)), exp(log_sd), true);
     }
     // Running counter
     if( predTF_i(i)==0 ) jnll += jnll_i(i);      //estimation

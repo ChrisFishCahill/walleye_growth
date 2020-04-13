@@ -53,11 +53,11 @@ spdeMatrices <- spde$param.inla[c("M0", "M1", "M2")]
 #---------------------
 # set up fit function for mapping, purrr, furrr
 
-get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.3, omega_global = 15,
+get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
                     rho = 0.9, kappa = 0.9, ln_sd_linf = 0, ln_sd_tzero = 0,
                     ln_b_sex = 0, ln_sd_omega_lake = 0, ln_sd_omega_time = 0,
                     sig_varies_fitted = c("fixed", "by lake", "by time", "both", "ar1 st"),
-                    silent = TRUE, Partition_i = NULL,
+                    silent = TRUE, partition_i = NULL,
                     REML = TRUE, ...) {
   sig_varies_fitted <- match.arg(sig_varies_fitted)
   cat(
@@ -68,8 +68,8 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.3, omega_global = 15,
     sep = ""
   )
   # estimate on all data unless partition declared
-  if (is.null(Partition_i)) {
-    Partition_i <- rep(0, nrow(data))
+  if (is.null(partition_i)) {
+    partition_i <- rep(0, nrow(data))
   }
   data <- list(
     Nobs = nrow(data),
@@ -82,7 +82,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.3, omega_global = 15,
     X_ij_omega = model.matrix(~ 1 + data$wallEffDen.Std + data$compEffDen.Std +
       data$GDD.Std + data$wallEffDen.Std:data$compEffDen.Std),
     spdeMatrices = spdeMatrices,
-    predTF_i = Partition_i
+    predTF_i = partition_i
   )
 
   parameters <- list(
@@ -99,7 +99,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.3, omega_global = 15,
     eps_linf = rep(0, data$Nlakes),
     eps_t0 = rep(0, data$Nlakes),
     eps_omega_st = matrix(0, nrow = mesh$n, ncol = length(unique(data$time_i))),
-    ln_cv = log(cv),
+    log_sd = log(sd),
     ln_kappa = log(kappa),
     ln_tau_O = log(SigO),
     rho_unscaled = qlogis((rho + 1) / 2)
@@ -146,11 +146,6 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.3, omega_global = 15,
     map = map,
     silent = silent
   )
-
-  # opt <- nlminb(obj$par, obj$fn, obj$gr,
-  #   eval.max = 1000, iter.max = 1000
-  # )
-
   opt <- TMBhelper::fit_tmb(
     obj = obj,
     control = list(eval.max = 1000, iter.max = 1000),
@@ -209,16 +204,17 @@ ml <- readRDS(file = "analysis2/ML_fits.rds")
 run_cv_experiment <- function(which_experiment = c("h block", "lolo"),
                               cv_fold = cv_fold,
                               sig_varies_fitted = sig_varies_fitted) {
+  which_experiment <- match.arg(which_experiment)
   if (which_experiment == "h block") {
-    Partition_i <- ifelse(data$Block != cv_fold, 0, 1)
+    partition_i <- ifelse(data$Block != cv_fold, 0, 1)
   } else {
-    Partition_i <- ifelse(data$Lake == cv_fold, 1, 0)
+    partition_i <- ifelse(data$Lake == cv_fold, 1, 0)
   }
-  out <- get_fit(sig_varies_fitted = sig_varies_fitted, Partition_i = Partition_i, silent = TRUE)
+  out <- get_fit(sig_varies_fitted = sig_varies_fitted, partition_i = partition_i, silent = TRUE)
   tibble::tibble(
     sig_varies_fitted = sig_varies_fitted,
     pred_jnll = out$obj$report()$pred_jnll,
-    cv_score = out$obj$report()$pred_jnll / sum(Partition_i),
+    cv_score = out$obj$report()$pred_jnll / sum(partition_i),
     cv_fold = cv_fold,
     convergence = out$opt$Convergence_check
   )
@@ -239,6 +235,7 @@ system.time({ # 9 minutes
 saveRDS(out, file = "analysis2/cv_h_block.rds")
 cv_h_block <- readRDS("analysis2/cv_h_block.rds")
 
+unique(cv_h_block$convergence)
 cv_h_block %>%
   group_by(sig_varies_fitted) %>%
   summarize(h_block_score = sum(cv_score) / n_distinct(cv_fold))
@@ -258,8 +255,9 @@ system.time({ # 113 minutes
 saveRDS(out, file = "analysis2/cv_lolo.rds")
 cv_lolo <- readRDS("analysis2/cv_lolo.rds")
 
+unique(cv_lolo$convergence)
 cv_lolo %>%
   group_by(sig_varies_fitted) %>%
-  summarize(cv_block_score = sum(cv_score) / n_distinct(cv_fold))
+  summarize(cv_lolo_score = sum(cv_score) / n_distinct(cv_fold))
 
 #---------------------
