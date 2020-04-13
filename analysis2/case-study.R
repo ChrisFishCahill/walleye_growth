@@ -71,6 +71,10 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
     fitted = "model fitted = ", sig_varies_fitted,
     sep = ""
   )
+  #estimate on all data unless cv fold declared
+  if (is.null(partition_i)) {
+    partition_i <- rep(0, nrow(data))
+  }
 
   data <- list(
     Nobs = nrow(data),
@@ -83,8 +87,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
     X_ij_omega = model.matrix(~ 1 + data$wallEffDen.Std + data$compEffDen.Std +
       data$GDD.Std + data$wallEffDen.Std:data$compEffDen.Std),
     spdeMatrices = spdeMatrices,
-    # estimate on all data unless partition declared:
-    predTF_i = ifelse(is.null(parition_i), rep(0, nrow(data)), partition_i)
+    predTF_i = partition_i
   )
 
   parameters <- list(
@@ -128,7 +131,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
     ))
   }
   if (fit_interaction == FALSE) {
-    offset_pos <- ncol(data$X_ij_omega)
+    offset_pos <- grep(":", colnames(data$X_ij_omega)) #find interaction position
     b_j_omega_map <- seq_along(parameters$b_j_omega)
     b_j_omega_map[offset_pos] <- NA
     map <- c(map, list(
@@ -178,7 +181,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
 }
 
 # Testing:
-#test1 <- get_fit(sig_varies_fitted = "ar1 st", silent = F, REML = F, fit_interaction = F)
+test1 <- get_fit(sig_varies_fitted = "ar1 st", silent = F, REML = T, fit_interaction = F)
 #test2 <- get_fit(sig_varies_fitted = "ar1 st", silent = F, REML = F, fit_interaction = T)
 #test1$opt$AIC
 #test2$opt$AIC
