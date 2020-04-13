@@ -72,7 +72,7 @@ Type objective_function<Type>::operator()()
   vector<Type> length_pred(Nobs);
   // Objective function
   Type jnll = 0;
-  Type pred_jnll=0;
+  Type pred_jnll = 0;
 
   vector<Type> jnll_i(Nobs);
   jnll_i.setZero();
@@ -99,35 +99,38 @@ Type objective_function<Type>::operator()()
     jnll += SCALE(SEPARABLE(AR1(rho), GMRF(Q)), 1.0 / exp(ln_tau_O))(eps_omega_st);
   }
 
+  vector<Type> omega_i (Nobs);
+
   // calculate fixed effects for omega:
   vector<Type> eta_fixed_i = X_ij_omega * b_j_omega;
 
   for (int i = 0; i < Nobs; i++) {
-    Type omega = exp(eta_fixed_i(i) +      // fixed effects
+    omega_i(i) = exp(eta_fixed_i(i) +      // fixed effects
       eps_omega_lake(lake_i(i)) +          // std lake ran eff
       eps_omega_time(time_i(i)) +          // std time ran eff
       eps_omega_st(lake_i(i), time_i(i))); // ar1 space time
 
-    Type linf = exp(ln_global_linf +       // intercept
-      ln_b_sex*sex_i(i) +                  // sex effect
-      eps_linf(lake_i(i)));                // std ran eff
+    Type linf = exp(ln_global_linf + // intercept
+      ln_b_sex*sex_i(i) +            // sex effect
+      eps_linf(lake_i(i)));          // std ran eff
 
-    Type t0 = global_tzero +      // intercept
-      eps_t0(lake_i(i));          // std ran eff
+    Type t0 = global_tzero + // intercept
+      eps_t0(lake_i(i));     // std ran eff
 
-    length_pred(i) = linf * (1 - exp(-(omega / linf) * (age_i(i) - t0)));
+    length_pred(i) = linf * (1 - exp(-(omega_i(i) / linf) * (age_i(i) - t0)));
 
     if (!isNA(length_i(i))){
       jnll_i(i) -= dlnorm(length_i(i), log(length_pred(i)), exp(ln_cv), true);
     }
     // Running counter
-    if( predTF_i(i)==0 ) jnll += jnll_i(i); //estimation
+    if( predTF_i(i)==0 ) jnll += jnll_i(i);      //estimation
     if( predTF_i(i)==1 ) pred_jnll += jnll_i(i); //prediction
   }
 
   ADREPORT(Range);
   ADREPORT(SigO);
   REPORT(rho);
+  REPORT(omega_i);
   REPORT(pred_jnll);
   return jnll;
 }
