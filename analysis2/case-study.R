@@ -185,7 +185,7 @@ system.time({ # ~3 minutes
   ) %>%
     setNames(c("by lake", "by time", "both", "ar1 st"))
 })
-saveRDS(out, file = "analysis2/REML_fits.rds")
+#saveRDS(out, file = "analysis2/REML_fits.rds")
 reml <- readRDS(file = "analysis2/REML_fits.rds")
 
 system.time({ # ~10 minutes
@@ -195,7 +195,7 @@ system.time({ # ~10 minutes
   ) %>%
     setNames(c("by lake", "by time", "both", "ar1 st"))
 })
-saveRDS(out, file = "analysis2/ML_fits.rds")
+#saveRDS(out, file = "analysis2/ML_fits.rds")
 ml <- readRDS(file = "analysis2/ML_fits.rds")
 
 #---------------------
@@ -232,7 +232,7 @@ system.time({ # 9 minutes
   out <- furrr::future_pmap_dfr(tofit, run_cv_experiment, which_experiment = "h block")
 })
 
-saveRDS(out, file = "analysis2/cv_h_block.rds")
+#saveRDS(out, file = "analysis2/cv_h_block.rds")
 cv_h_block <- readRDS("analysis2/cv_h_block.rds")
 
 unique(cv_h_block$convergence)
@@ -252,7 +252,7 @@ system.time({ # 113 minutes
   out <- furrr::future_pmap_dfr(tofit, run_cv_experiment, which_experiment = "lolo")
 })
 
-saveRDS(out, file = "analysis2/cv_lolo.rds")
+#saveRDS(out, file = "analysis2/cv_lolo.rds")
 cv_lolo <- readRDS("analysis2/cv_lolo.rds")
 
 unique(cv_lolo$convergence)
