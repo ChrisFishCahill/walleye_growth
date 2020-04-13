@@ -131,9 +131,9 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
     ))
   }
   if (fit_interaction == FALSE) {
-    offset_pos <- grep(":", colnames(data$X_ij_omega)) #find interaction position
+    interaction_pos <- grep(":", colnames(data$X_ij_omega))
     b_j_omega_map <- seq_along(parameters$b_j_omega)
-    b_j_omega_map[offset_pos] <- NA
+    b_j_omega_map[interaction_pos] <- NA
     map <- c(map, list(
       b_j_omega = as.factor(b_j_omega_map)
     ))
