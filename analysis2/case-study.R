@@ -11,20 +11,46 @@ library(TMBhelper)
 plan(multisession, workers = future::availableCores() / 2)
 TMB::compile("analysis2/vb_alta.cpp")
 
+#---------------------
+# Read in the data and add in the block variable for cross validation
+
 data <- readRDS("analysis2/vB_analysis_august_2019_cahill.rds")
 data[, c("X_TTM_c", "Y_TTM_c")] <- data[, c("X_TTM_c", "Y_TTM_c")] / 1000 # put distance in km
 Loc <- unique(data[, c("X_TTM_c", "Y_TTM_c")])
 
+# Add in the block variable to data for cross validation
+Loc$Block <- NA
+Loc[which(Loc$X_TTM_c < 400 & Loc$Y_TTM_c > 6400), "Block"] <- 1
+Loc[which(Loc$X_TTM_c < 410 & Loc$Y_TTM_c < 6200 & is.na(Loc$Block)), "Block"] <- 2
+Loc[which(Loc$X_TTM_c < 450 & Loc$Y_TTM_c < 6000 & is.na(Loc$Block)), "Block"] <- 2
+Loc[which(Loc$X_TTM_c < 500 & Loc$Y_TTM_c > 6100 & is.na(Loc$Block)), "Block"] <- 3
+Loc[which(Loc$X_TTM_c < 660 & Loc$Y_TTM_c > 6000 & is.na(Loc$Block)), "Block"] <- 4
+Loc[which(Loc$X_TTM_c < 625 & Loc$Y_TTM_c < 6000 & is.na(Loc$Block)), "Block"] <- 5
+Loc[which(Loc$Y_TTM_c < 5800 & is.na(Loc$Block)), "Block"] <- 6
+Loc[which(Loc$X_TTM_c > 660 & Loc$Y_TTM_c > 5800 & is.na(Loc$Block)), "Block"] <- 7
+
+# ggplot(Loc, aes(x = X_TTM_c, y = Y_TTM_c, color = as.factor(Block))) +
+#   geom_point() +
+#   theme_bw() +
+#   scale_colour_manual(values = RColorBrewer::brewer.pal(7, "Dark2"))
+
+data <- dplyr::left_join(data, Loc, by = c("X_TTM_c", "Y_TTM_c"))
+
+#---------------------
+# Build mesh and inputs for INLA approach:
+
 # mesh = inla.mesh.2d(loc=Loc, max.edge=c(62,1000)) #Better mesh, but slower
-mesh <- inla.mesh.create(Loc, refine = TRUE, extend = -0.5, cutoff = 0.01) # faster mesh
+mesh <- inla.mesh.create(Loc[, c("X_TTM_c", "Y_TTM_c")], refine = TRUE, extend = -0.5, cutoff = 0.01) # faster mesh
 
 # png(file="Mesh.png",width=9.50,height=7.00,units="in",res=600)
-plot(mesh)
-points(Loc, col = "Steelblue", pch = 1)
+# plot(mesh)
+# points(Loc, col = "Steelblue", pch = 1)
 # dev.off()
 
 spde <- INLA::inla.spde2.matern(mesh, alpha = 2)
 spdeMatrices <- spde$param.inla[c("M0", "M1", "M2")]
+#---------------------
+# set up fit function for mapping, purrr, furrr
 
 get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.3, omega_global = 15,
                     rho = 0.9, kappa = 0.9, ln_sd_linf = 0, ln_sd_tzero = 0,
@@ -40,7 +66,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.3, omega_global = 15,
     fitted = "model fitted = ", sig_varies_fitted,
     sep = ""
   )
-  #estimate on all data unless partition declared
+  # estimate on all data unless partition declared
   if (is.null(Partition_i)) {
     Partition_i <- rep(0, nrow(data))
   }
@@ -132,6 +158,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.3, omega_global = 15,
   rep <- TMB::sdreport(obj, bias.correct = TRUE)
   final_gradient <- obj$gr(opt$par)
   if (any(abs(final_gradient) > 0.001) || rep$pdHess == FALSE) {
+    opt$Convergence_check <- "Model did not converge: check results"
     cat(
       crayon::red(
         clisymbols::symbol$cross
@@ -145,55 +172,38 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, cv = 0.3, omega_global = 15,
 
 # Testing:
 # test <- get_fit(sig_varies_fitted = "by lake", silent = F, REML = F)
-# system.time({
-#   out <- purrr::pmap(tofit, get_fit, silent = F) %>%
-#                                 setNames( c("by lake", "by time", "both", "ar1 st"))
-# })
+# out <- purrr::pmap(tofit, get_fit, silent = F) %>%
+#                    setNames( c("by lake", "by time", "both", "ar1 st"))
+
+#---------------------
+# Fit models using restricted maximum likelihood & maximum likelihood
 
 tofit <- dplyr::tibble(
   sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
 )
 
-system.time({ #~3 minutes
+system.time({ # ~3 minutes
   out <- furrr::future_pmap(tofit, get_fit,
     silent = TRUE,
     REML = TRUE
   ) %>%
     setNames(c("by lake", "by time", "both", "ar1 st"))
 })
-#saveRDS(out, file = "analysis2/REML_fits.rds")
+saveRDS(out, file = "analysis2/REML_fits.rds")
+reml <- readRDS(file = "analysis2/REML_fits.rds")
 
-system.time({#~10 minutes
+system.time({ # ~10 minutes
   out <- furrr::future_pmap(tofit, get_fit,
     silent = TRUE,
     REML = FALSE
   ) %>%
     setNames(c("by lake", "by time", "both", "ar1 st"))
 })
-#saveRDS(out, file = "analysis2/ML_fits.rds")
+saveRDS(out, file = "analysis2/ML_fits.rds")
+ml <- readRDS(file = "analysis2/ML_fits.rds")
 
-#-----------------------------
-# cross-validation routines:
-#-----------------------------
-# h-block cross validation
-
-# Add in the block variable to data:
-Loc$Block <- NA
-Loc[which(Loc$X_TTM_c < 400 & Loc$Y_TTM_c > 6400), "Block"] <- 1
-Loc[which(Loc$X_TTM_c < 410 & Loc$Y_TTM_c < 6200 & is.na(Loc$Block)), "Block"] <- 2
-Loc[which(Loc$X_TTM_c < 450 & Loc$Y_TTM_c < 6000 & is.na(Loc$Block)), "Block"] <- 2
-Loc[which(Loc$X_TTM_c < 500 & Loc$Y_TTM_c > 6100 & is.na(Loc$Block)), "Block"] <- 3
-Loc[which(Loc$X_TTM_c < 660 & Loc$Y_TTM_c > 6000 & is.na(Loc$Block)), "Block"] <- 4
-Loc[which(Loc$X_TTM_c < 625 & Loc$Y_TTM_c < 6000 & is.na(Loc$Block)), "Block"] <- 5
-Loc[which(Loc$Y_TTM_c < 5800 & is.na(Loc$Block)), "Block"] <- 6
-Loc[which(Loc$X_TTM_c > 660 & Loc$Y_TTM_c > 5800 & is.na(Loc$Block)), "Block"] <- 7
-
-ggplot(Loc, aes(x = X_TTM_c, y = Y_TTM_c, color = as.factor(Block))) +
-  geom_point() +
-  theme_bw() +
-  scale_colour_manual(values = RColorBrewer::brewer.pal(7, "Dark2"))
-
-data <- dplyr::left_join(data, Loc, by = c("X_TTM_c", "Y_TTM_c"))
+#---------------------
+# cross-validation routines
 
 run_cv_experiment <- function(which_experiment = c("h block", "lolo"),
                               cv_fold = cv_fold,
@@ -213,12 +223,15 @@ run_cv_experiment <- function(which_experiment = c("h block", "lolo"),
   )
 }
 
+#---------------------
+# h-block (spatial) cross validation
+
 tofit <- tidyr::expand_grid(
   cv_fold = seq_len(length(unique(data$Block))),
   sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
 )
 
-system.time({# 9 minutes
+system.time({ # 9 minutes
   out <- furrr::future_pmap_dfr(tofit, run_cv_experiment, which_experiment = "h block")
 })
 
@@ -229,21 +242,23 @@ cv_h_block %>%
   group_by(sig_varies_fitted) %>%
   summarize(h_block_score = sum(cv_score) / n_distinct(cv_fold))
 
-#-----------------------------
+#---------------------
 # leave one lake out cross validation
-#-----------------------------
+
 tofit <- tidyr::expand_grid(
   cv_fold = seq_len(length(unique(data$Lake))),
   sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
 )
 
-system.time({
+system.time({ # 113 minutes
   out <- furrr::future_pmap_dfr(tofit, run_cv_experiment, which_experiment = "lolo")
 })
 
-#saveRDS(out, file = "analysis2/cv_lolo.rds")
+saveRDS(out, file = "analysis2/cv_lolo.rds")
 cv_lolo <- readRDS("analysis2/cv_lolo.rds")
 
 cv_lolo %>%
   group_by(sig_varies_fitted) %>%
   summarize(cv_block_score = sum(cv_score) / n_distinct(cv_fold))
+
+#---------------------
