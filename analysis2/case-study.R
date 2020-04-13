@@ -1,5 +1,5 @@
 #---------------------
-# Packages
+# Load packages
 
 library(ggplot2)
 theme_set(theme_light())
@@ -11,18 +11,18 @@ library(purrr)
 library(furrr)
 library(dplyr)
 library(TMBhelper)
+library(arm)
 # TMB:::setupRStudio()
 plan(multisession, workers = future::availableCores() / 2)
 TMB::compile("analysis2/vb_alta.cpp")
 
 #---------------------
-# Read in the data and add in the block variable for cross validation
+# Read in the data, add block variable for cross validation, lake_centered_dens
 
 data <- readRDS("analysis2/vB_analysis_august_2019_cahill.rds")
 data[, c("X_TTM_c", "Y_TTM_c")] <- data[, c("X_TTM_c", "Y_TTM_c")] / 1000 # put distance in km
 Loc <- unique(data[, c("X_TTM_c", "Y_TTM_c")])
 
-# Add in the block variable to data for cross validation
 Loc$Block <- NA
 Loc[which(Loc$X_TTM_c < 400 & Loc$Y_TTM_c > 6400), "Block"] <- 1
 Loc[which(Loc$X_TTM_c < 410 & Loc$Y_TTM_c < 6200 & is.na(Loc$Block)), "Block"] <- 2
@@ -32,13 +32,23 @@ Loc[which(Loc$X_TTM_c < 660 & Loc$Y_TTM_c > 6000 & is.na(Loc$Block)), "Block"] <
 Loc[which(Loc$X_TTM_c < 625 & Loc$Y_TTM_c < 6000 & is.na(Loc$Block)), "Block"] <- 5
 Loc[which(Loc$Y_TTM_c < 5800 & is.na(Loc$Block)), "Block"] <- 6
 Loc[which(Loc$X_TTM_c > 660 & Loc$Y_TTM_c > 5800 & is.na(Loc$Block)), "Block"] <- 7
+data <- dplyr::left_join(data, Loc, by = c("X_TTM_c", "Y_TTM_c"))
 
 # ggplot(Loc, aes(x = X_TTM_c, y = Y_TTM_c, color = as.factor(Block))) +
 #   geom_point() +
 #   theme_bw() +
 #   scale_colour_manual(values = RColorBrewer::brewer.pal(7, "Dark2"))
 
-data <- dplyr::left_join(data, Loc, by = c("X_TTM_c", "Y_TTM_c"))
+# lake centered density for random slopes:
+data <- data %>%
+  group_by(WBID) %>%
+  summarize(lake_mean_dens = mean(wallEffDen)) %>%
+  mutate(lake_centered_dens.std = arm::rescale(lake_mean_dens)) %>%
+  dplyr::left_join(data, .x, by = "WBID")
+
+# Reorder the lakes or else tmb explodes
+data <- within(data, Lake <- as.numeric(interaction(data$WBID, drop = TRUE, lex.order = F)))
+data <- data[order(data$Lake), ]
 
 #---------------------
 # Build mesh and inputs for INLA approach:
@@ -60,7 +70,8 @@ spdeMatrices <- spde$param.inla[c("M0", "M1", "M2")]
 get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
                     rho = 0.9, kappa = 0.9, ln_sd_linf = 0, ln_sd_tzero = 0,
                     ln_b_sex = 0, ln_sd_omega_lake = 0, ln_sd_omega_time = 0,
-                    sig_varies_fitted = c("fixed", "by lake", "by time", "both", "ar1 st"),
+                    mu_slope = 0, sd_slope = 1,
+                    sig_varies_fitted = c("fixed", "by lake", "by time", "both", "ar1 st", "ar1 st slopes"),
                     silent = TRUE, partition_i = NULL,
                     REML = TRUE, fit_interaction = TRUE, ...) {
   sig_varies_fitted <- match.arg(sig_varies_fitted)
@@ -71,7 +82,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
     fitted = "model fitted = ", sig_varies_fitted,
     sep = ""
   )
-  #estimate on all data unless cv fold declared
+  # estimate on all data unless cv fold declared
   if (is.null(partition_i)) {
     partition_i <- rep(0, nrow(data))
   }
@@ -86,6 +97,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
     sex_i = data$SexCode,
     X_ij_omega = model.matrix(~ 1 + data$wallEffDen.Std + data$compEffDen.Std +
       data$GDD.Std + data$wallEffDen.Std:data$compEffDen.Std),
+    within_lake_i = data$lake_centered_dens.std,
     spdeMatrices = spdeMatrices,
     predTF_i = partition_i
   )
@@ -103,6 +115,9 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
     eps_omega_time = rep(0, length(unique(data$time_i))),
     eps_linf = rep(0, data$Nlakes),
     eps_t0 = rep(0, data$Nlakes),
+    ln_sd_slope = log(sd_slope),
+    mu_slope = mu_slope,
+    eps_omega_slope = rep(0, data$Nlakes),
     eps_omega_st = matrix(0, nrow = mesh$n, ncol = length(unique(data$time_i))),
     log_sd = log(sd),
     ln_kappa = log(kappa),
@@ -110,24 +125,38 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
     rho_unscaled = qlogis((rho + 1) / 2)
   )
   map <- list()
-  if (sig_varies_fitted %in% c("fixed", "by time", "ar1 st")) {
+  if (sig_varies_fitted %in% c("fixed", "by time", "ar1 st", "ar1 st slopes")) {
     map <- c(map, list(
       eps_omega_lake = as.factor(rep(NA, data$Nlakes)),
       ln_sd_omega_lake = factor(NA)
     ))
   }
-  if (sig_varies_fitted %in% c("fixed", "by lake", "ar1 st")) {
+  if (sig_varies_fitted %in% c("fixed", "by lake", "ar1 st", "ar1 st slopes")) {
     map <- c(map, list(
       eps_omega_time = as.factor(rep(NA, length(unique(data$time_i)))),
       ln_sd_omega_time = factor(NA)
     ))
   }
-  if (sig_varies_fitted != "ar1 st") {
+  if (sig_varies_fitted %in% c("fixed", "by lake", "by time", "both")) {
     map <- c(map, list(
       eps_omega_st = as.factor(matrix(NA, nrow = mesh$n, ncol = length(unique(data$time_i)))),
       ln_kappa = factor(NA),
       rho_unscaled = factor(NA),
       ln_tau_O = factor(NA)
+    ))
+  }
+  if (sig_varies_fitted != "ar1 st slopes") {
+    map <- c(map, list(
+      eps_omega_slope = as.factor(rep(NA, data$Nlakes)),
+      ln_sd_slope = factor(NA),
+      mu_slope = factor(NA)
+    ))
+  } else {
+    slope_pos <- grep("wallEffDen.Std", colnames(data$X_ij_omega))[1]
+    b_j_omega_map <- seq_along(parameters$b_j_omega)
+    b_j_omega_map[slope_pos] <- NA
+    map <- c(map, list(
+      b_j_omega = as.factor(b_j_omega_map)
     ))
   }
   if (fit_interaction == FALSE) {
@@ -138,14 +167,14 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
       b_j_omega = as.factor(b_j_omega_map)
     ))
   }
-
-  random <- c("eps_linf", "eps_t0", "eps_omega_lake", "eps_omega_time", "eps_omega_st")
+  random <- c("eps_linf", "eps_t0", "eps_omega_lake", "eps_omega_time", "eps_omega_slope", "eps_omega_st")
   if (REML == TRUE) {
     random <- union(random, c(
       "b_j_omega",
       "ln_global_linf",
       "global_tzero",
-      "ln_b_sex"
+      "ln_b_sex",
+      "mu_slope"
     ))
   }
 
@@ -181,38 +210,52 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
 }
 
 # Testing:
-test1 <- get_fit(sig_varies_fitted = "ar1 st", silent = F, REML = T, fit_interaction = F)
-#test2 <- get_fit(sig_varies_fitted = "ar1 st", silent = F, REML = F, fit_interaction = T)
-#test1$opt$AIC
-#test2$opt$AIC
+# tofit <- dplyr::tibble(
+#   sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
+# )
+#out <- get_fit(sig_varies_fitted = "by lake", silent = F, REML = T, fit_interaction = T)
 # out <- purrr::pmap(tofit, get_fit, silent = F) %>%
 #                    setNames( c("by lake", "by time", "both", "ar1 st"))
 
 #---------------------
 # Fit models using restricted maximum likelihood & maximum likelihood
 
-tofit <- dplyr::tibble(
-  sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
+tofit <- tidyr::expand_grid(
+  sig_varies_fitted = c("by lake", "by time", "both", "ar1 st", "ar1 st slopes"),
+  fit_interaction = c(TRUE, FALSE)
 )
 
-system.time({ # ~3 minutes
+system.time({ # 7 minutes
   out <- furrr::future_pmap(tofit, get_fit,
     silent = TRUE,
     REML = TRUE
   ) %>%
-    setNames(c("by lake", "by time", "both", "ar1 st"))
+    setNames(c(
+      "by lake full", "by lake reduced",
+      "by time full", "by time reduced",
+      "both full", "both reduced",
+      "ar1 st full", "ar1 st reduced",
+      "ar1 st slopes full", "ar1 st slopes reduced"
+    ))
 })
-# saveRDS(out, file = "analysis2/REML_fits.rds")
+
+#saveRDS(out, file = "analysis2/REML_fits.rds")
 reml <- readRDS(file = "analysis2/REML_fits.rds")
 
-system.time({ # ~10 minutes
+system.time({ # 20 minutes
   out <- furrr::future_pmap(tofit, get_fit,
     silent = TRUE,
     REML = FALSE
   ) %>%
-    setNames(c("by lake", "by time", "both", "ar1 st"))
+    setNames(c(
+      "by lake full", "by lake reduced",
+      "by time full", "by time reduced",
+      "both full", "both reduced",
+      "ar1 st full", "ar1 st reduced"
+    ))
 })
-# saveRDS(out, file = "analysis2/ML_fits.rds")
+
+#saveRDS(out, file = "analysis2/ML_fits.rds")
 ml <- readRDS(file = "analysis2/ML_fits.rds")
 
 #---------------------
@@ -220,16 +263,21 @@ ml <- readRDS(file = "analysis2/ML_fits.rds")
 
 run_cv_experiment <- function(which_experiment = c("h block", "lolo"),
                               cv_fold = cv_fold,
-                              sig_varies_fitted = sig_varies_fitted) {
+                              sig_varies_fitted = sig_varies_fitted,
+                              fit_interaction = fit_interaction) {
   which_experiment <- match.arg(which_experiment)
   if (which_experiment == "h block") {
     partition_i <- ifelse(data$Block != cv_fold, 0, 1)
   } else {
     partition_i <- ifelse(data$Lake == cv_fold, 1, 0)
   }
-  out <- get_fit(sig_varies_fitted = sig_varies_fitted, partition_i = partition_i, silent = TRUE)
+  out <- get_fit(
+    sig_varies_fitted = sig_varies_fitted, partition_i = partition_i,
+    fit_interaction = fit_interaction, silent = TRUE
+  )
   tibble::tibble(
     sig_varies_fitted = sig_varies_fitted,
+    fit_interaction = fit_interaction,
     pred_jnll = out$obj$report()$pred_jnll,
     cv_score = out$obj$report()$pred_jnll / sum(partition_i),
     cv_fold = cv_fold,
@@ -242,14 +290,15 @@ run_cv_experiment <- function(which_experiment = c("h block", "lolo"),
 
 tofit <- tidyr::expand_grid(
   cv_fold = seq_len(length(unique(data$Block))),
-  sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
+  sig_varies_fitted = c("by lake", "by time", "both", "ar1 st"),
+  fit_interaction = c(TRUE, FALSE)
 )
 
 system.time({ # 9 minutes
   out <- furrr::future_pmap_dfr(tofit, run_cv_experiment, which_experiment = "h block")
 })
 
-# saveRDS(out, file = "analysis2/cv_h_block.rds")
+#saveRDS(out, file = "analysis2/cv_h_block.rds")
 cv_h_block <- readRDS("analysis2/cv_h_block.rds")
 
 unique(cv_h_block$convergence)
@@ -262,14 +311,15 @@ cv_h_block %>%
 
 tofit <- tidyr::expand_grid(
   cv_fold = seq_len(length(unique(data$Lake))),
-  sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
+  sig_varies_fitted = c("by lake", "by time", "both", "ar1 st"),
+  fit_interaction = c(TRUE, FALSE)
 )
 
 system.time({ # 113 minutes
   out <- furrr::future_pmap_dfr(tofit, run_cv_experiment, which_experiment = "lolo")
 })
 
-# saveRDS(out, file = "analysis2/cv_lolo.rds")
+#saveRDS(out, file = "analysis2/cv_lolo.rds")
 cv_lolo <- readRDS("analysis2/cv_lolo.rds")
 
 unique(cv_lolo$convergence)

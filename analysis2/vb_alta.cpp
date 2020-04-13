@@ -36,16 +36,15 @@ Type objective_function<Type>::operator()()
   DATA_INTEGER(Nlakes);                // Number of lakes
   DATA_IVECTOR(sex_i);                 // factor for sex
   DATA_MATRIX(X_ij_omega);             // covariate matrix for omega
+  DATA_VECTOR(within_lake_i);          // effective density centered within lake i
   DATA_STRUCT(spdeMatrices, spde_t);   // SPDE objects
   DATA_VECTOR(predTF_i);               // Indicator for CV fold
 
   // Parameters
   PARAMETER(ln_global_linf);
   PARAMETER(ln_sd_linf);
-
   PARAMETER(global_tzero);
   PARAMETER(ln_sd_tzero);
-
   PARAMETER(ln_b_sex);
   PARAMETER_VECTOR(b_j_omega);
 
@@ -56,6 +55,9 @@ Type objective_function<Type>::operator()()
   PARAMETER_VECTOR(eps_omega_time);
   PARAMETER_VECTOR(eps_linf);
   PARAMETER_VECTOR(eps_t0);
+  PARAMETER(ln_sd_slope);
+  PARAMETER(mu_slope);
+  PARAMETER_VECTOR(eps_omega_slope);
   PARAMETER_ARRAY(eps_omega_st);
 
   // Likelihood noise term
@@ -83,6 +85,8 @@ Type objective_function<Type>::operator()()
     jnll -= dnorm(eps_t0(l), Type(0.0), exp(ln_sd_tzero), true);
     if (CppAD::Variable(eps_omega_lake(l)))
       jnll -= dnorm(eps_omega_lake(l), Type(0.0), exp(ln_sd_omega_lake), true);
+    if (CppAD::Variable(eps_omega_slope(l)))
+      jnll -= dnorm(eps_omega_slope(l), Type(0.0), exp(ln_sd_slope), true);
   }
 
   for (int t = 0; t < eps_omega_time.size(); t++) {
@@ -105,10 +109,11 @@ Type objective_function<Type>::operator()()
   vector<Type> eta_fixed_i = X_ij_omega * b_j_omega;
 
   for (int i = 0; i < Nobs; i++) {
-    omega_i(i) = exp(eta_fixed_i(i) +      // fixed effects
-      eps_omega_lake(lake_i(i)) +          // std lake ran eff
-      eps_omega_time(time_i(i)) +          // std time ran eff
-      eps_omega_st(lake_i(i), time_i(i))); // ar1 space time
+    omega_i(i) = exp(eta_fixed_i(i) +                            // fixed effects
+      eps_omega_lake(lake_i(i)) +                                // std lake ran eff
+      eps_omega_time(time_i(i)) +                                // std time ran eff
+      (mu_slope + eps_omega_slope(lake_i(i)))*within_lake_i(i) + // std slope ran eff
+      eps_omega_st(lake_i(i), time_i(i)));                       // ar1 space time
 
     Type linf = exp(ln_global_linf + // intercept
       ln_b_sex*sex_i(i) +            // sex effect
