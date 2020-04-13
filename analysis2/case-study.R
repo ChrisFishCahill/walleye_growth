@@ -1,3 +1,6 @@
+#---------------------
+# Packages
+
 library(ggplot2)
 theme_set(theme_light())
 library(TMB)
@@ -8,6 +11,7 @@ library(purrr)
 library(furrr)
 library(dplyr)
 library(TMBhelper)
+# TMB:::setupRStudio()
 plan(multisession, workers = future::availableCores() / 2)
 TMB::compile("analysis2/vb_alta.cpp")
 
@@ -58,7 +62,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
                     ln_b_sex = 0, ln_sd_omega_lake = 0, ln_sd_omega_time = 0,
                     sig_varies_fitted = c("fixed", "by lake", "by time", "both", "ar1 st"),
                     silent = TRUE, partition_i = NULL,
-                    REML = TRUE, ...) {
+                    REML = TRUE, fit_interaction = TRUE, ...) {
   sig_varies_fitted <- match.arg(sig_varies_fitted)
   cat(
     crayon::green(
@@ -67,10 +71,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
     fitted = "model fitted = ", sig_varies_fitted,
     sep = ""
   )
-  # estimate on all data unless partition declared
-  if (is.null(partition_i)) {
-    partition_i <- rep(0, nrow(data))
-  }
+
   data <- list(
     Nobs = nrow(data),
     length_i = data$TL,
@@ -82,7 +83,8 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
     X_ij_omega = model.matrix(~ 1 + data$wallEffDen.Std + data$compEffDen.Std +
       data$GDD.Std + data$wallEffDen.Std:data$compEffDen.Std),
     spdeMatrices = spdeMatrices,
-    predTF_i = partition_i
+    # estimate on all data unless partition declared:
+    predTF_i = ifelse(is.null(parition_i), rep(0, nrow(data)), partition_i)
   )
 
   parameters <- list(
@@ -125,6 +127,14 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
       ln_tau_O = factor(NA)
     ))
   }
+  if (fit_interaction == FALSE) {
+    offset_pos <- ncol(data$X_ij_omega)
+    b_j_omega_map <- seq_along(parameters$b_j_omega)
+    b_j_omega_map[offset_pos] <- NA
+    map <- c(map, list(
+      b_j_omega = as.factor(b_j_omega_map)
+    ))
+  }
 
   random <- c("eps_linf", "eps_t0", "eps_omega_lake", "eps_omega_time", "eps_omega_st")
   if (REML == TRUE) {
@@ -135,6 +145,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
       "ln_b_sex"
     ))
   }
+
   if (!"vb_alta" %in% names(getLoadedDLLs())) {
     cat(crayon::blue(clisymbols::symbol$star), "Loading DLL\n")
     dyn.load(dynlib("analysis2/vb_alta"))
@@ -167,7 +178,10 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
 }
 
 # Testing:
-# test <- get_fit(sig_varies_fitted = "by lake", silent = F, REML = F)
+#test1 <- get_fit(sig_varies_fitted = "ar1 st", silent = F, REML = F, fit_interaction = F)
+#test2 <- get_fit(sig_varies_fitted = "ar1 st", silent = F, REML = F, fit_interaction = T)
+#test1$opt$AIC
+#test2$opt$AIC
 # out <- purrr::pmap(tofit, get_fit, silent = F) %>%
 #                    setNames( c("by lake", "by time", "both", "ar1 st"))
 
@@ -185,7 +199,7 @@ system.time({ # ~3 minutes
   ) %>%
     setNames(c("by lake", "by time", "both", "ar1 st"))
 })
-#saveRDS(out, file = "analysis2/REML_fits.rds")
+# saveRDS(out, file = "analysis2/REML_fits.rds")
 reml <- readRDS(file = "analysis2/REML_fits.rds")
 
 system.time({ # ~10 minutes
@@ -195,7 +209,7 @@ system.time({ # ~10 minutes
   ) %>%
     setNames(c("by lake", "by time", "both", "ar1 st"))
 })
-#saveRDS(out, file = "analysis2/ML_fits.rds")
+# saveRDS(out, file = "analysis2/ML_fits.rds")
 ml <- readRDS(file = "analysis2/ML_fits.rds")
 
 #---------------------
@@ -232,7 +246,7 @@ system.time({ # 9 minutes
   out <- furrr::future_pmap_dfr(tofit, run_cv_experiment, which_experiment = "h block")
 })
 
-#saveRDS(out, file = "analysis2/cv_h_block.rds")
+# saveRDS(out, file = "analysis2/cv_h_block.rds")
 cv_h_block <- readRDS("analysis2/cv_h_block.rds")
 
 unique(cv_h_block$convergence)
@@ -252,7 +266,7 @@ system.time({ # 113 minutes
   out <- furrr::future_pmap_dfr(tofit, run_cv_experiment, which_experiment = "lolo")
 })
 
-#saveRDS(out, file = "analysis2/cv_lolo.rds")
+# saveRDS(out, file = "analysis2/cv_lolo.rds")
 cv_lolo <- readRDS("analysis2/cv_lolo.rds")
 
 unique(cv_lolo$convergence)
