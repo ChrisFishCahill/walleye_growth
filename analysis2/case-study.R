@@ -241,7 +241,7 @@ system.time({
   out <- furrr::future_pmap_dfr(tofit, run_cv_experiment, which_experiment = "lolo")
 })
 
-saveRDS(out, file = "analysis2/cv_lolo.rds")
+#saveRDS(out, file = "analysis2/cv_lolo.rds")
 cv_lolo <- readRDS("analysis2/cv_lolo.rds")
 
 cv_lolo %>%
