@@ -49,6 +49,7 @@ mesh <- inla.mesh.create(Loc[, c("X_TTM_c", "Y_TTM_c")], refine = TRUE, extend =
 
 spde <- INLA::inla.spde2.matern(mesh, alpha = 2)
 spdeMatrices <- spde$param.inla[c("M0", "M1", "M2")]
+
 #---------------------
 # set up fit function for mapping, purrr, furrr
 
