@@ -67,12 +67,16 @@ MyTable$Interaction <- ifelse(MyTable$Interaction == "TRUE", "Yes", "No")
 
 MyTable$`Delta~REML~AIC` <- round(MyTable$`Delta~REML~AIC`, 1)
 MyTable$`Delta~REML~AIC` <- MyTable$`Delta~REML~AIC` - min(MyTable$`Delta~REML~AIC`)
+MyTable$`Delta~REML~AIC` = sprintf("%0.1f", MyTable$`Delta~REML~AIC`)
 
 MyTable$`Delta~ML~AIC` <- round(MyTable$`Delta~ML~AIC`, 1)
 MyTable$`Delta~ML~AIC` <- MyTable$`Delta~ML~AIC` - min(MyTable$`Delta~ML~AIC`)
+MyTable$`Delta~ML~AIC` = sprintf("%0.1f", MyTable$`Delta~ML~AIC`)
 
 MyTable$`LOLO~CV` <- round(MyTable$`LOLO~CV`, 2)
+MyTable$`LOLO~CV` = sprintf("%0.2f", MyTable$`LOLO~CV`)
 MyTable$`H~block~CV` <- round(MyTable$`H~block~CV`, 2)
+MyTable$`H~block~CV` = sprintf("%0.2f", MyTable$`H~block~CV`)
 
 colnames(MyTable) <- c(
   "bold(Model)", "bold(Interaction~term)",
@@ -83,8 +87,8 @@ colnames(MyTable) <- c(
 g <- tableGrob(MyTable,
   rows = NULL,
   theme = ttheme_minimal(
-    parse = TRUE,
-    colhead = list(fg_params = list(fontsize = 12, fontface = 3))
+    parse = FALSE,
+    colhead = list(fg_params = list(fontsize = 12, fontface = 3, parse=TRUE))
   )
 )
 
