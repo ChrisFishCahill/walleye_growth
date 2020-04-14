@@ -17,7 +17,7 @@ library(grid)
 library(gridExtra)
 
 #---------------------
-# Read in results and make Table 1:
+# Read in results and make Table 1 (misery):
 
 cv_h_block <- readRDS("analysis2/cv_h_block.rds")
 
@@ -43,8 +43,8 @@ reml <- readRDS(file = "analysis2/REML_fits.rds")
 
 remls <- map_dbl(.x = reml, .f = function(.x) {
   return(.x$opt$AIC)
-})[1:nrow(MyTable)]
-mls <- map_dbl(.x = reml, .f = function(.x) {
+})[1:nrow(MyTable)] # get rid of random slopes model
+mls <- map_dbl(.x = ml, .f = function(.x) {
   return(.x$opt$AIC)
 })[1:nrow(MyTable)]
 
@@ -57,26 +57,20 @@ which_order <- c(
 MyTable$`REML AIC` <- remls[order(factor(names(remls), levels = which_order))]
 MyTable$`ML AIC` <- mls[order(factor(names(mls), levels = which_order))]
 
-colnames(MyTable) <- c(
-  "Model", "Interaction",
-  "LOLO~CV", "H~block~CV", "Delta~REML~AIC",
-  "Delta~ML~AIC"
-)
+MyTable$fit_interaction <- ifelse(MyTable$fit_interaction == "TRUE", "Yes", "No")
 
-MyTable$Interaction <- ifelse(MyTable$Interaction == "TRUE", "Yes", "No")
+MyTable$`REML AIC` <- round(MyTable$`REML AIC`, 1)
+MyTable$`REML AIC` <- MyTable$`REML AIC` - min(MyTable$`REML AIC`)
+MyTable$`REML AIC` <- sprintf("%0.1f", MyTable$`REML AIC`)
 
-MyTable$`Delta~REML~AIC` <- round(MyTable$`Delta~REML~AIC`, 1)
-MyTable$`Delta~REML~AIC` <- MyTable$`Delta~REML~AIC` - min(MyTable$`Delta~REML~AIC`)
-MyTable$`Delta~REML~AIC` = sprintf("%0.1f", MyTable$`Delta~REML~AIC`)
+MyTable$`ML AIC` <- round(MyTable$`ML AIC`, 1)
+MyTable$`ML AIC` <- MyTable$`ML AIC` - min(MyTable$`ML AIC`)
+MyTable$`ML AIC` <- sprintf("%0.1f", MyTable$`ML AIC`)
 
-MyTable$`Delta~ML~AIC` <- round(MyTable$`Delta~ML~AIC`, 1)
-MyTable$`Delta~ML~AIC` <- MyTable$`Delta~ML~AIC` - min(MyTable$`Delta~ML~AIC`)
-MyTable$`Delta~ML~AIC` = sprintf("%0.1f", MyTable$`Delta~ML~AIC`)
-
-MyTable$`LOLO~CV` <- round(MyTable$`LOLO~CV`, 2)
-MyTable$`LOLO~CV` = sprintf("%0.2f", MyTable$`LOLO~CV`)
-MyTable$`H~block~CV` <- round(MyTable$`H~block~CV`, 2)
-MyTable$`H~block~CV` = sprintf("%0.2f", MyTable$`H~block~CV`)
+MyTable$cv_lolo_score <- round(MyTable$cv_lolo_score, 2)
+MyTable$cv_lolo_score <- sprintf("%0.2f", MyTable$cv_lolo_score)
+MyTable$h_block_score <- round(MyTable$h_block_score, 2)
+MyTable$h_block_score <- sprintf("%0.2f", MyTable$h_block_score)
 
 colnames(MyTable) <- c(
   "bold(Model)", "bold(Interaction~term)",
@@ -88,7 +82,7 @@ g <- tableGrob(MyTable,
   rows = NULL,
   theme = ttheme_minimal(
     parse = FALSE,
-    colhead = list(fg_params = list(fontsize = 12, fontface = 3, parse=TRUE))
+    colhead = list(fg_params = list(fontsize = 12, fontface = 3, parse = TRUE))
   )
 )
 
@@ -127,6 +121,6 @@ g <- gtable_add_grob(g,
   t = 10, b = 10, l = 1, r = 6
 )
 
-ggsave("analysis2/table_1.jpeg", g, width = 7, height = 4.5, dpi=1200, units="in")
+#ggsave("analysis2/table_1.jpeg", g, width = 7, height = 4.5, dpi=600, units="in")
 
 #---------------------
