@@ -123,7 +123,7 @@ g <- gtable_add_grob(g,
   t = 10, b = 10, l = 1, r = 6
 )
 
-pdf("analysis2/table_1.pdf", width = 7, height = 5)
+#pdf("analysis2/table_1.pdf", width = 7, height = 3.5)
 grid.draw(g)
 dev.off()
 
