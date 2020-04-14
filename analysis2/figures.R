@@ -58,9 +58,9 @@ MyTable$`REML AIC` <- remls[order(factor(names(remls), levels = which_order))]
 MyTable$`ML AIC` <- mls[order(factor(names(mls), levels = which_order))]
 
 colnames(MyTable) <- c(
-  "bold(Model)","bold(Interaction~term)",
-  "bold(LOLO~CV)", "bold(H~block~CV)", paste0("bold(Delta", "~REML~AIC)"),
-  paste0("bold(Delta", "~ML~AIC)")
+  "Model", "Interaction",
+  "LOLO~CV", "H~block~CV", "Delta~REML~AIC",
+  "Delta~ML~AIC"
 )
 
 MyTable$Interaction <- ifelse(MyTable$Interaction == "TRUE", "Yes", "No")
@@ -74,6 +74,12 @@ MyTable$`Delta~ML~AIC` <- MyTable$`Delta~ML~AIC` - min(MyTable$`Delta~ML~AIC`)
 MyTable$`LOLO~CV` <- round(MyTable$`LOLO~CV`, 2)
 MyTable$`H~block~CV` <- round(MyTable$`H~block~CV`, 2)
 
+colnames(MyTable) <- c(
+  "bold(Model)", "bold(Interaction~term)",
+  "bold(LOLO~CV)", "bold(H~block~CV)", paste0("bold(Delta", "~REML~AIC)"),
+  paste0("bold(Delta", "~ML~AIC)")
+)
+
 g <- tableGrob(MyTable,
   rows = NULL,
   theme = ttheme_minimal(
@@ -82,7 +88,7 @@ g <- tableGrob(MyTable,
   )
 )
 
-g <- gtable_add_rows(g, heights = unit(0.11, "npc"), pos = 0)
+g <- gtable_add_rows(g, heights = unit(0.15, "npc"), pos = 0)
 
 g <- gtable_add_grob(g,
   grobs = segmentsGrob(
