@@ -12,6 +12,7 @@ library(furrr)
 library(dplyr)
 library(TMBhelper)
 library(arm)
+
 # TMB:::setupRStudio()
 plan(multisession, workers = future::availableCores() / 2)
 TMB::compile("analysis2/vb_alta.cpp")
@@ -213,7 +214,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
 # tofit <- dplyr::tibble(
 #   sig_varies_fitted = c("by lake", "by time", "both", "ar1 st")
 # )
-#out <- get_fit(sig_varies_fitted = "by lake", silent = F, REML = T, fit_interaction = T)
+# out <- get_fit(sig_varies_fitted = "by lake", silent = F, REML = T, fit_interaction = T)
 # out <- purrr::pmap(tofit, get_fit, silent = F) %>%
 #                    setNames( c("by lake", "by time", "both", "ar1 st"))
 
@@ -225,7 +226,7 @@ tofit <- tidyr::expand_grid(
   fit_interaction = c(TRUE, FALSE)
 )
 
-system.time({ # 7 minutes
+system.time({ # 7.4 minutes
   out <- furrr::future_pmap(tofit, get_fit,
     silent = TRUE,
     REML = TRUE
@@ -239,10 +240,9 @@ system.time({ # 7 minutes
     ))
 })
 
-#saveRDS(out, file = "analysis2/REML_fits.rds")
-reml <- readRDS(file = "analysis2/REML_fits.rds")
+# saveRDS(out, file = "analysis2/REML_fits.rds")
 
-system.time({ # 20 minutes
+system.time({ # 22 minutes
   out <- furrr::future_pmap(tofit, get_fit,
     silent = TRUE,
     REML = FALSE
@@ -251,12 +251,12 @@ system.time({ # 20 minutes
       "by lake full", "by lake reduced",
       "by time full", "by time reduced",
       "both full", "both reduced",
-      "ar1 st full", "ar1 st reduced"
+      "ar1 st full", "ar1 st reduced",
+      "ar1 st slopes full", "ar1 st slopes reduced"
     ))
 })
 
-#saveRDS(out, file = "analysis2/ML_fits.rds")
-ml <- readRDS(file = "analysis2/ML_fits.rds")
+# saveRDS(out, file = "analysis2/ML_fits.rds")
 
 #---------------------
 # cross-validation routines
@@ -294,17 +294,11 @@ tofit <- tidyr::expand_grid(
   fit_interaction = c(TRUE, FALSE)
 )
 
-system.time({ # 9 minutes
+system.time({ # 19 minutes
   out <- furrr::future_pmap_dfr(tofit, run_cv_experiment, which_experiment = "h block")
 })
 
-#saveRDS(out, file = "analysis2/cv_h_block.rds")
-cv_h_block <- readRDS("analysis2/cv_h_block.rds")
-
-unique(cv_h_block$convergence)
-cv_h_block %>%
-  group_by(sig_varies_fitted) %>%
-  summarize(h_block_score = sum(cv_score) / n_distinct(cv_fold))
+# saveRDS(out, file = "analysis2/cv_h_block.rds")
 
 #---------------------
 # leave one lake out cross validation
@@ -315,16 +309,10 @@ tofit <- tidyr::expand_grid(
   fit_interaction = c(TRUE, FALSE)
 )
 
-system.time({ # 113 minutes
+system.time({ # 215 minutes
   out <- furrr::future_pmap_dfr(tofit, run_cv_experiment, which_experiment = "lolo")
 })
 
-#saveRDS(out, file = "analysis2/cv_lolo.rds")
-cv_lolo <- readRDS("analysis2/cv_lolo.rds")
-
-unique(cv_lolo$convergence)
-cv_lolo %>%
-  group_by(sig_varies_fitted) %>%
-  summarize(cv_lolo_score = sum(cv_score) / n_distinct(cv_fold))
+# saveRDS(out, file = "analysis2/cv_lolo.rds")
 
 #---------------------
