@@ -12,10 +12,7 @@ library(future)
 library(tidyr)
 library(INLA)
 library(purrr)
-library(furrr)
 library(dplyr)
-library(TMBhelper)
-library(arm)
 library(gtable)
 library(grid)
 library(gridExtra)
@@ -258,11 +255,11 @@ p <- p + theme(
 p <- p + labs(fill = "")
 p
 
-ggsave("analysis2/Fig_3.png",
-  p,
-  width = 11, height = 5,
-  units = c("in"), dpi = 1200
-)
+# ggsave("analysis2/Fig_3.png",
+#   p,
+#   width = 11, height = 5,
+#   units = c("in"), dpi = 1200
+# )
 
 #---------------------
 # Figure 5 Flying spaghetti monster plot:
@@ -309,7 +306,7 @@ mycol2 <- t_col("darkorange", perc = 50, name = "lt.orange")
 #   width = 8, height = 6, units = "in", res = 1200
 # )
 
-par(mar = c(4.1, 4.1, 2.1, 2.1))
+par(mfrow=c(1,1), mar = c(4.1, 4.1, 2.1, 2.1))
 plot(data$FL ~ data$Age,
   lty = 2, col = "white", ylim = c(0, 80), xlim = c(-.5, 26.5),
   xlab = "Age (Years)", ylab = "Total Length (cm)", lwd = 2.5,
@@ -329,7 +326,7 @@ for (i in unique(data$WBID)) {
       b_j_omega[2] * sub.sub.dat$wallEffDen.Std[1] +
       b_j_omega[3] * sub.sub.dat$compEffDen.Std[1] +
       b_j_omega[4] * sub.sub.dat$GDD.Std[1] +
-      # b_j_omega[4]*sub.sub.dat$wallEffDen.Std[1]*sub.sub.dat$compEffDen.Std[1] +
+      # b_j_omega[5]*sub.sub.dat$wallEffDen.Std[1]*sub.sub.dat$compEffDen.Std[1] +
       sub.sub.dat$eps[1])
     linf <- exp(ln_global_linf +
       ln_b_sex * c(0, 1) +
@@ -642,3 +639,96 @@ big <- ggarrange(ggarrange(p, p1, ncol = 1, nrow = 2), map, widths = c(1, 1))
 # ggsave("analysis2/Fig_4.png", big,
 #   dpi = 1200, width = 10, height = 6.5, units = c("in")
 # )
+
+#-------------------------------
+#Appendix lake-year fit figure
+
+t0 <- reml$`ar1 st reduced`$rep$par.random["global_tzero"]
+eps_t0 <- reml$`ar1 st reduced`$rep$par.random[which(names(reml$`ar1 st reduced`$rep$par.random) == "eps_t0")]
+ln_global_linf <- reml$`ar1 st reduced`$rep$par.random["ln_global_linf"]
+eps_linf <- reml$`ar1 st reduced`$rep$par.random[which(names(reml$`ar1 st reduced`$rep$par.random) == "eps_linf")]
+ln_b_sex <- reml$`ar1 st reduced`$rep$par.random["ln_b_sex"]
+b_j_omega <- reml$`ar1 st reduced`$rep$par.random[which(names(reml$`ar1 st reduced`$rep$par.random) == "b_j_omega")]
+log_sd <- reml$`ar1 st reduced`$opt$par["log_sd"]
+eps_st <- reml$`ar1 st reduced`$rep$par.random[which(names(reml$`ar1 st reduced`$rep$par.random) == "eps_omega_st")]
+eps_st <- matrix(eps_st, nrow = mesh$n, ncol = length(unique(data$Year)))
+data$eps <- NA
+data$eps <- purrr::map_dbl(1:nrow(data), function(i) {
+  eps_st[data$Lake[i], data$Year[i]]
+})
+
+Age_Seq <- 0:26
+# pdf("analysis2/best_model_lake_year_fits.pdf",
+#   width=8, height=11)
+par(mfrow=c(3,3))
+for(i in unique(data$WBID)){
+  sub.dat <- data[which(data$WBID==i),]
+  Lake <- unique(sub.dat$Lake)
+  Name <- unique(sub.dat$Name)
+  for(j in unique(sub.dat$Year)) {
+    sub.sub.dat <- sub.dat[which(sub.dat$Year==j),]
+    tzero = t0 +
+      eps_t0[Lake]
+
+      omega <- exp(b_j_omega[1] +
+      b_j_omega[2] * sub.sub.dat$wallEffDen.Std[1] +
+      b_j_omega[3] * sub.sub.dat$compEffDen.Std[1] +
+      b_j_omega[4] * sub.sub.dat$GDD.Std[1] +
+      # b_j_omega[5]*sub.sub.dat$wallEffDen.Std[1]*sub.sub.dat$compEffDen.Std[1] +
+      sub.sub.dat$eps[1])
+
+      linf <- exp(ln_global_linf +
+      ln_b_sex * c(0, 1) +
+      eps_linf[Lake])
+
+    lpred_m <- lpred_f <- NA
+    for(a in 1:length(Age_Seq)){
+      lpred_m[a] = linf[1]*(1-exp(-(omega/linf[1]) * (Age_Seq[a] - t0 )))
+      lpred_f[a] = linf[2]*(1-exp(-(omega/linf[2]) * (Age_Seq[a] - t0 )))
+    }
+
+    plot(lpred_f~Age_Seq, type="l", lty=2, col="black", ylim=c(0,85), main=paste(Name, j, sep= " " ),
+         xlab="Age (Years)", ylab="Total Length (cm)", cex.main=1, lwd=1.5)
+    points(lpred_m~Age_Seq, type="l", col="black", lwd=1.5)
+    points(sub.sub.dat$TL~sub.sub.dat$Age, pch=sub.sub.dat$SexCode)
+    text(x=20, y=25, labels = paste0("Linf = ", format(round(linf[2],2), nsmall=2)))
+    text(x=20, y=15, labels = paste0("Omega = ", format(round(omega,2), nsmall=2)))
+    text(x=20, y=5, labels = paste0("T0 = ", format(round(tzero,2), nsmall=2)))
+
+}}
+#dev.off()
+
+#-------------------------------
+#Appendix random slopes
+reml <- readRDS(file = "analysis2/REML_fits.rds")
+
+mu_slope = reml$`ar1 st slopes reduced`$rep$par.random[which(names(reml$`ar1 st slopes reduced`$rep$par.random) == "mu_slope")]
+eps_slope = reml$`ar1 st slopes reduced`$rep$par.random[which(names(reml$`ar1 st slopes reduced`$rep$par.random) == "eps_omega_slope")]
+se_slope = as.list(reml$`ar1 st slopes reduced`$rep, "Std. Error")$eps_omega_slope
+
+my_slopes = data.frame((mu_slope + eps_slope) + se_slope%o%qnorm(c(0.025, 0.5, 0.975)))
+colnames(my_slopes) <- c("Lower95", "MLE", "Upper95")
+
+my_slopes$Name = tolower(unique(data$Name))
+
+my_slopes = my_slopes[with(my_slopes, order(MLE)),]
+my_slopes$Name <- factor(my_slopes$Name, as.character(my_slopes$Name))
+
+p <- ggplot(data = my_slopes,
+                    aes(x = MLE,
+                        xmax = Upper95,
+                        xmin = Lower95,
+                        y = Name)) +  geom_point() +
+  geom_segment( aes(x = Lower95, xend = Upper95,
+                    y = Name, yend=Name)) +
+  xlab("Slope Estimate for Intraspecific Density") + ylab("Lake") +
+  theme(text = element_text(size = 10)) +
+  theme(axis.title = element_text(size=15)) +
+  theme(axis.line = element_line(colour = 'black', size = 1, linetype = 'solid'))
+
+p <- p + ggsidekick::theme_sleek()
+p
+
+#ggsave("analysis2/random_slopes.png", height=11, width=10)
+
+#-------------------------------
