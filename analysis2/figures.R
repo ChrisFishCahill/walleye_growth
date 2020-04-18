@@ -7,8 +7,6 @@
 # devtools::install_github("eliocamp/ggalt@new-coord-proj")
 library(ggplot2)
 theme_set(theme_light())
-library(TMB)
-library(future)
 library(tidyr)
 library(INLA)
 library(purrr)
