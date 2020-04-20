@@ -368,10 +368,6 @@ d <- mutate(data,
   group_by(WBID, year) %>%
   filter(year < 2018)
 
-colfunc <- colorRampPalette(c("darkblue", "white", "darkorange2"))
-colfunc(25)
-plot(rep(1, 25), col = colfunc(25), pch = 19, cex = 3)
-
 can1 <- raster::getData("GADM", country = "CAN", level = 1)
 alta <- can1[can1$NAME_1 %in% "Alberta", ]
 
@@ -385,30 +381,25 @@ names(alta.fort)[1] <- "Long_c"
 names(alta.fort)[2] <- "Lat_c"
 
 p <- ggplot(NULL) +
-  theme_classic() +
   geom_polygon(colour = "black", fill = "white", data = alta.fort, aes(x = Long_c, y = Lat_c, group = id)) +
   geom_point(pch = 21, size = 2.0, data = d, aes(Long_c, Lat_c, fill = mu)) +
   scale_x_continuous(breaks = c(-120, -115, -110)) +
   scale_y_continuous(breaks = c(49, 52, 56, 60)) +
   scale_fill_gradient2(
-    low = "steelblue", high = "darkorange1",
-    midpoint = 15.5,
+    #low = "steelblue", high = "darkorange1",
+    midpoint = exp(b_j_omega[1]),
+    high= "darkorange2", #scales::muted("red"),
+    low= "blue2", #scales::muted("blue"),
     name = bquote(atop(Growth ~ Rate ~ bold((omega)), ~ cm %.% year^{
       -1
     }))
   )
 
 p <- p + facet_wrap(~year, nrow = 3) +
-  ylab("Latitude") + xlab("Longitude") +
-  theme(
-    axis.title = element_text(size = 15),
-    strip.background = element_blank(),
-    strip.text.x = element_blank(),
-    panel.spacing.x = unit(1, "lines"),
-    panel.spacing.y = unit(0.5, "lines")
-  )
+  ylab("Latitude") + xlab("Longitude")
+
 p <- p + geom_text(
-  data = d,
+  data = d, colour = "grey30",
   mapping = aes(
     x = -112, y = 59.5, label = year,
     group = year
@@ -416,12 +407,25 @@ p <- p + geom_text(
 )
 
 p <- p + ggalt::coord_proj(
-  paste0(CRS("+proj=tmerc +lat_0=0 +lon_0=-115 +k=0.9992 +x_0=500000 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs "))
+  paste0(CRS("+proj=tmerc +lat_0=0 +lon_0=-115 +k=0.9992 +x_0=500000 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs"))
 )
-p
 
-# ggsave("analysis2/Fig_6.png",
+p <- p + ggsidekick::theme_sleek() +
+  theme(
+    axis.line = element_line(colour = "grey30"),
+    axis.title = element_text(size = 15, colour = "grey30"),
+    strip.background = element_blank(),
+    strip.text.x = element_blank(),
+    panel.spacing.x = unit(1, "lines"),
+    panel.spacing.y = unit(0.5, "lines"),
+    panel.border= element_blank()
+  )
+
+# ggsave("analysis2/Fig_6_orange_blue.png",
 #        p, dpi=1200, width=11, height=8, units=c("in"))
+
+# ggsave("analysis2/Fig_6_orange_blue.pdf",
+#        p, width=11, height=8, units=c("in"))
 
 #-------------------------------
 # Figure 7--spatial range
@@ -434,8 +438,8 @@ dis.vec <- seq(0, max(D), length = 1000)
 Cor.M <- (Kappa * dis.vec) * besselK(Kappa * dis.vec, 1) # matern correlation
 Cor.M[1] <- 1
 
-# png( "analysis2/Fig_7.png",
-#   width=11, height=5, res=1200, units="in")
+png( "analysis2/Fig_7.png",
+  width=11, height=5, res=1200, units="in")
 par(mfrow = c(1, 2), mar = c(3, 3, 2, 1), mgp = c(2, 0.5, 0), tck = -0.02)
 
 plot(
@@ -450,8 +454,8 @@ hist(dist(Loc),
   xlab = "Distance between Lakes (km)", main = "", cex.lab = 1.25,
   breaks = 40, bty = "o", cex.axis = 1.15, yaxs = "i", las = 1
 )
-abline(v = Range, lty = 3, lwd = 6, col = "Steelblue")
-# dev.off()
+abline(v = Range, lty = 3, lwd = 6, col = "black")
+dev.off()
 
 #-------------------------------
 # Behemoth misery multipanel plot (i.e., figure 4)
