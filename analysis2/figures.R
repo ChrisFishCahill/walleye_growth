@@ -773,4 +773,4 @@ p
 #-------------------------------
 # study map (Fig 1):
 devtools::source_url("https://raw.githubusercontent.com/ChrisFishCahill/fish-map/master/alberta-map.R")
-alberta_map(data=data, filename="analysis2/Fig_1_map")
+alberta_map(data = data, filename = "analysis2/Fig_1_map")
