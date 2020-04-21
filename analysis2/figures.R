@@ -772,8 +772,5 @@ p
 
 #-------------------------------
 # study map (Fig 1):
-devtools::source_url("https://github.com/ChrisFishCahill/fish-map/blob/master/alberta-map.R")
-library(RCurl)
-script <- "https://github.com/ChrisFishCahill/fish-map/blob/master/alberta-map.R"
-eval(parse(text = script))
+devtools::source_url("https://raw.githubusercontent.com/ChrisFishCahill/fish-map/master/alberta-map.R")
 alberta_map(data=data, filename="analysis2/Fig_1_map")
