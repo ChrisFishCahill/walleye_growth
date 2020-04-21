@@ -17,6 +17,9 @@ library(gridExtra)
 library(ggalt)
 library(ggpubr)
 library(ggforce)
+library(maps)
+library(maptools)
+library(grid)
 
 # Read in ml and reml results
 ml <- readRDS(file = "analysis2/ML_fits.rds")
@@ -297,20 +300,33 @@ t_col <- function(color, percent = 50, name = NULL) {
   invisible(t.col)
 }
 
-mycol1 <- t_col("steelblue", perc = 15, name = "lt.blue")
-mycol2 <- t_col("darkorange", perc = 50, name = "lt.orange")
+colfunc <- colorRampPalette(c("navy", "darkorange1"))
+plot(rep(1:30), col = colfunc(30), pch = 19, cex = 3)
+red_col <- colfunc(30)[29]
+blue_col <- colfunc(30)[6]
 
-# png("analysis2/Fig_5.png",
-#   width = 8, height = 6, units = "in", res = 1200
-# )
+mycol1 <- t_col(blue_col, perc = 40, name = "lt.blue")
+mycol2 <- t_col(red_col, perc = 60, name = "lt.red")
 
-par(mfrow=c(1,1), mar = c(4.1, 4.1, 2.1, 2.1))
+mycol3 <- t_col(blue_col, perc = 15, name = "lt.blue")
+mycol4 <- t_col(red_col, perc = 15, name = "lt.red")
+
+png("analysis2/Fig_5_orange_blue.png",
+  width = 8, height = 6, units = "in", res = 1200
+)
+
+par(mfrow = c(1, 1), mar = c(4, 4, 2, 2))
 plot(data$FL ~ data$Age,
   lty = 2, col = "white", ylim = c(0, 80), xlim = c(-.5, 26.5),
-  xlab = "Age (Years)", ylab = "Total Length (cm)", lwd = 2.5,
-  las = 1, cex.lab = 1.25, cex.axis = 1.15, bty = "l", yaxs = "i", xaxs = "i"
+  xlab = "", ylab = "",
+  axes = F, yaxs = "i", xaxs = "i"
 )
 points(data$FL ~ jitter(data$Age, factor = 1.5), pch = 21, bg = data$colCode, cex = 0.5)
+axis(1, col = "gray30", col.ticks = "gray30", col.axis = "gray30", cex.axis = 1, cex.lab = 1, yaxs = "i", xaxs = "i")
+axis(2, col = "gray30", col.ticks = "gray30", col.axis = "gray30", cex.axis = 1, las = 1)
+mtext("Age (Years)", side = 1, line = 3, col = "gray30", cex = 1)
+mtext("Total Length (cm)", side = 2, line = 3, col = "gray30", cex = 1)
+
 for (i in unique(data$WBID)) {
   sub.dat <- data[which(data$WBID == i), ]
   Lake <- unique(sub.dat$Lake)
@@ -342,12 +358,12 @@ for (i in unique(data$WBID)) {
 
 Ages <- 0:max(data$Age)
 Lpreds <- exp(ln_global_linf) * (1 - exp(-(exp(b_j_omega[1]) / exp(ln_global_linf)) * (Ages - t0)))
-lines(Ages, Lpreds, lty = 1, lwd = 4, col = "steelblue")
+lines(Ages, Lpreds, lty = 1, lwd = 4, col = mycol3)
 
 Lpreds <- exp(ln_global_linf + ln_b_sex) * (1 - exp(-(exp(b_j_omega[1]) / exp(ln_global_linf + ln_b_sex)) * (Ages - t0)))
-lines(Ages, Lpreds, lty = 1, lwd = 4, col = "orange")
+lines(Ages, Lpreds, lty = 1, lwd = 4, col = mycol4)
 
-# dev.off()
+dev.off()
 
 #---------------------
 # Figure 6 growth predictions in space-time
@@ -386,10 +402,10 @@ p <- ggplot(NULL) +
   scale_x_continuous(breaks = c(-120, -115, -110)) +
   scale_y_continuous(breaks = c(49, 52, 56, 60)) +
   scale_fill_gradient2(
-    #low = "steelblue", high = "darkorange1",
+    # low = "steelblue", high = "darkorange1",
     midpoint = exp(b_j_omega[1]),
-    high= "darkorange2", #scales::muted("red"),
-    low= "blue2", #scales::muted("blue"),
+    high = "darkorange1", # scales::muted("red"),
+    low = "navy", # scales::muted("blue"),
     name = bquote(atop(Growth ~ Rate ~ bold((omega)), ~ cm %.% year^{
       -1
     }))
@@ -418,14 +434,14 @@ p <- p + ggsidekick::theme_sleek() +
     strip.text.x = element_blank(),
     panel.spacing.x = unit(1, "lines"),
     panel.spacing.y = unit(0.5, "lines"),
-    panel.border= element_blank()
+    panel.border = element_blank()
   )
+# p
+# ggsave("analysis2/Fig_6_red_blue.png",
+#         p, dpi=1200, width=11, height=8, units=c("in"))
 
 # ggsave("analysis2/Fig_6_orange_blue.png",
 #        p, dpi=1200, width=11, height=8, units=c("in"))
-
-# ggsave("analysis2/Fig_6_orange_blue.pdf",
-#        p, width=11, height=8, units=c("in"))
 
 #-------------------------------
 # Figure 7--spatial range
@@ -438,24 +454,35 @@ dis.vec <- seq(0, max(D), length = 1000)
 Cor.M <- (Kappa * dis.vec) * besselK(Kappa * dis.vec, 1) # matern correlation
 Cor.M[1] <- 1
 
-png( "analysis2/Fig_7.png",
-  width=11, height=5, res=1200, units="in")
-par(mfrow = c(1, 2), mar = c(3, 3, 2, 1), mgp = c(2, 0.5, 0), tck = -0.02)
+png("analysis2/Fig_7.png",
+  width = 11, height = 5.5, res = 1200, units = "in"
+)
+par(mfrow = c(1, 2), mar = c(4, 4, 4, 2), mgp = c(2, 0.5, 0), tck = -0.02)
 
 plot(
   x = dis.vec, y = Cor.M,
-  type = "l", cex.lab = 1.25, cex.axis = 1.15,
-  xlab = "Distance (km)", yaxs = "i", xaxs = "i",
-  ylab = "Correlation", xlim = c(0, 110), bty = "l",
-  las = 1
+  type = "l",
+  xlab = "", ylab = "",
+  xlim = c(0, 100), bty = "l",
+  axes = F, yaxs = "i", xaxs = "i"
 )
+axis(1, col = "gray30", col.ticks = "gray30", col.axis = "gray30", cex.axis = 1)
+mtext("Distance (km)", side = 1, line = 3, col = "gray30", cex = 1)
+axis(2, col = "gray30", col.ticks = "gray30", col.axis = "gray30", padj = , cex.axis = 1, las = 1, yaxs = "i")
+mtext("Correlation", side = 2, line = 3, col = "gray30", cex = 1)
+# dev.off()
+
 
 hist(dist(Loc),
-  xlab = "Distance between Lakes (km)", main = "", cex.lab = 1.25,
-  breaks = 40, bty = "o", cex.axis = 1.15, yaxs = "i", las = 1
+  xlab = "", ylab = "", main = "", cex.lab = 1.25, axes = F,
+  breaks = 40, bty = "o", cex.axis = 1.15, yaxs = "i",
 )
-abline(v = Range, lty = 3, lwd = 6, col = "black")
-dev.off()
+axis(1, col = "gray30", col.ticks = "gray30", col.axis = "gray30", cex.axis = 1)
+mtext("Distance between lakes (km)", side = 1, line = 3, col = "gray30", cex = 1)
+axis(2, col = "gray30", col.ticks = "gray30", col.axis = "gray30", cex.axis = 1, las = 1)
+mtext("Frequency", side = 2, line = 3, col = "gray30", cex = 1)
+abline(v = Range, lty = 2, cex = 1, col = "black")
+# dev.off()
 
 #-------------------------------
 # Behemoth misery multipanel plot (i.e., figure 4)
@@ -643,7 +670,7 @@ big <- ggarrange(ggarrange(p, p1, ncol = 1, nrow = 2), map, widths = c(1, 1))
 # )
 
 #-------------------------------
-#Appendix lake-year fit figure
+# Appendix lake-year fit figure
 
 t0 <- reml$`ar1 st reduced`$rep$par.random["global_tzero"]
 eps_t0 <- reml$`ar1 st reduced`$rep$par.random[which(names(reml$`ar1 st reduced`$rep$par.random) == "eps_t0")]
@@ -662,75 +689,91 @@ data$eps <- purrr::map_dbl(1:nrow(data), function(i) {
 Age_Seq <- 0:26
 # pdf("analysis2/best_model_lake_year_fits.pdf",
 #   width=8, height=11)
-par(mfrow=c(3,3))
-for(i in unique(data$WBID)){
-  sub.dat <- data[which(data$WBID==i),]
+par(mfrow = c(3, 3))
+for (i in unique(data$WBID)) {
+  sub.dat <- data[which(data$WBID == i), ]
   Lake <- unique(sub.dat$Lake)
   Name <- unique(sub.dat$Name)
-  for(j in unique(sub.dat$Year)) {
-    sub.sub.dat <- sub.dat[which(sub.dat$Year==j),]
-    tzero = t0 +
+  for (j in unique(sub.dat$Year)) {
+    sub.sub.dat <- sub.dat[which(sub.dat$Year == j), ]
+    tzero <- t0 +
       eps_t0[Lake]
 
-      omega <- exp(b_j_omega[1] +
+    omega <- exp(b_j_omega[1] +
       b_j_omega[2] * sub.sub.dat$wallEffDen.Std[1] +
       b_j_omega[3] * sub.sub.dat$compEffDen.Std[1] +
       b_j_omega[4] * sub.sub.dat$GDD.Std[1] +
       # b_j_omega[5]*sub.sub.dat$wallEffDen.Std[1]*sub.sub.dat$compEffDen.Std[1] +
       sub.sub.dat$eps[1])
 
-      linf <- exp(ln_global_linf +
+    linf <- exp(ln_global_linf +
       ln_b_sex * c(0, 1) +
       eps_linf[Lake])
 
     lpred_m <- lpred_f <- NA
-    for(a in 1:length(Age_Seq)){
-      lpred_m[a] = linf[1]*(1-exp(-(omega/linf[1]) * (Age_Seq[a] - t0 )))
-      lpred_f[a] = linf[2]*(1-exp(-(omega/linf[2]) * (Age_Seq[a] - t0 )))
+    for (a in 1:length(Age_Seq)) {
+      lpred_m[a] <- linf[1] * (1 - exp(-(omega / linf[1]) * (Age_Seq[a] - t0)))
+      lpred_f[a] <- linf[2] * (1 - exp(-(omega / linf[2]) * (Age_Seq[a] - t0)))
     }
 
-    plot(lpred_f~Age_Seq, type="l", lty=2, col="black", ylim=c(0,85), main=paste(Name, j, sep= " " ),
-         xlab="Age (Years)", ylab="Total Length (cm)", cex.main=1, lwd=1.5)
-    points(lpred_m~Age_Seq, type="l", col="black", lwd=1.5)
-    points(sub.sub.dat$TL~sub.sub.dat$Age, pch=sub.sub.dat$SexCode)
-    text(x=20, y=25, labels = paste0("Linf = ", format(round(linf[2],2), nsmall=2)))
-    text(x=20, y=15, labels = paste0("Omega = ", format(round(omega,2), nsmall=2)))
-    text(x=20, y=5, labels = paste0("T0 = ", format(round(tzero,2), nsmall=2)))
-
-}}
-#dev.off()
+    plot(lpred_f ~ Age_Seq,
+      type = "l", lty = 2, col = "black", ylim = c(0, 85), main = paste(Name, j, sep = " "),
+      xlab = "Age (Years)", ylab = "Total Length (cm)", cex.main = 1, lwd = 1.5
+    )
+    points(lpred_m ~ Age_Seq, type = "l", col = "black", lwd = 1.5)
+    points(sub.sub.dat$TL ~ sub.sub.dat$Age, pch = sub.sub.dat$SexCode)
+    text(x = 20, y = 25, labels = paste0("Linf = ", format(round(linf[2], 2), nsmall = 2)))
+    text(x = 20, y = 15, labels = paste0("Omega = ", format(round(omega, 2), nsmall = 2)))
+    text(x = 20, y = 5, labels = paste0("T0 = ", format(round(tzero, 2), nsmall = 2)))
+  }
+}
+# dev.off()
 
 #-------------------------------
-#Appendix random slopes
+# Appendix random slopes
 reml <- readRDS(file = "analysis2/REML_fits.rds")
 
-mu_slope = reml$`ar1 st slopes reduced`$rep$par.random[which(names(reml$`ar1 st slopes reduced`$rep$par.random) == "mu_slope")]
-eps_slope = reml$`ar1 st slopes reduced`$rep$par.random[which(names(reml$`ar1 st slopes reduced`$rep$par.random) == "eps_omega_slope")]
-se_slope = as.list(reml$`ar1 st slopes reduced`$rep, "Std. Error")$eps_omega_slope
+mu_slope <- reml$`ar1 st slopes reduced`$rep$par.random[which(names(reml$`ar1 st slopes reduced`$rep$par.random) == "mu_slope")]
+eps_slope <- reml$`ar1 st slopes reduced`$rep$par.random[which(names(reml$`ar1 st slopes reduced`$rep$par.random) == "eps_omega_slope")]
+se_slope <- as.list(reml$`ar1 st slopes reduced`$rep, "Std. Error")$eps_omega_slope
 
-my_slopes = data.frame((mu_slope + eps_slope) + se_slope%o%qnorm(c(0.025, 0.5, 0.975)))
+my_slopes <- data.frame((mu_slope + eps_slope) + se_slope %o% qnorm(c(0.025, 0.5, 0.975)))
 colnames(my_slopes) <- c("Lower95", "MLE", "Upper95")
 
-my_slopes$Name = tolower(unique(data$Name))
+my_slopes$Name <- tolower(unique(data$Name))
 
-my_slopes = my_slopes[with(my_slopes, order(MLE)),]
+my_slopes <- my_slopes[with(my_slopes, order(MLE)), ]
 my_slopes$Name <- factor(my_slopes$Name, as.character(my_slopes$Name))
 
-p <- ggplot(data = my_slopes,
-                    aes(x = MLE,
-                        xmax = Upper95,
-                        xmin = Lower95,
-                        y = Name)) +  geom_point() +
-  geom_segment( aes(x = Lower95, xend = Upper95,
-                    y = Name, yend=Name)) +
-  xlab("Slope Estimate for Intraspecific Density") + ylab("Lake") +
+p <- ggplot(
+  data = my_slopes,
+  aes(
+    x = MLE,
+    xmax = Upper95,
+    xmin = Lower95,
+    y = Name
+  )
+) +
+  geom_point() +
+  geom_segment(aes(
+    x = Lower95, xend = Upper95,
+    y = Name, yend = Name
+  )) +
+  xlab("Slope Estimate for Intraspecific Density") +
+  ylab("Lake") +
   theme(text = element_text(size = 10)) +
-  theme(axis.title = element_text(size=15)) +
-  theme(axis.line = element_line(colour = 'black', size = 1, linetype = 'solid'))
+  theme(axis.title = element_text(size = 15)) +
+  theme(axis.line = element_line(colour = "black", size = 1, linetype = "solid"))
 
 p <- p + ggsidekick::theme_sleek()
 p
 
-#ggsave("analysis2/random_slopes.png", height=11, width=10)
+# ggsave("analysis2/random_slopes.png", height=11, width=10)
 
 #-------------------------------
+# study map (Fig 1):
+devtools::source_url("https://github.com/ChrisFishCahill/fish-map/blob/master/alberta-map.R")
+library(RCurl)
+script <- "https://github.com/ChrisFishCahill/fish-map/blob/master/alberta-map.R"
+eval(parse(text = script))
+alberta_map(data=data, filename="analysis2/Fig_1_map")
