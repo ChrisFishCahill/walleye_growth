@@ -241,7 +241,9 @@ p <- p + facet_wrap(~WhichVariable,
   scales = "free_y", nrow = 1,
   labeller = label_parsed
 )
-p <- p + theme(
+p <- p +
+  ggsidekick::theme_sleek() +
+  theme(
   plot.title = element_text(hjust = 0.5, size = 14),
   axis.title = element_text(size = 14),
   axis.text.x = element_text(size = 12),
@@ -249,16 +251,15 @@ p <- p + theme(
   legend.key = element_blank(),
   panel.grid.major = element_blank(),
   panel.grid.minor = element_blank(),
-  strip.text.x = element_text(size = 15, colour = "black")
-) +
-  ggsidekick::theme_sleek()
+  strip.text.x = element_text(size = 14, colour = "gray30"),
+  strip.text = element_text(size=8))
 
 p <- p + labs(fill = "")
 p
 
 # ggsave("analysis2/Fig_3.png",
 #   p,
-#   width = 11, height = 5,
+#   width = 13, height = 5,
 #   units = c("in"), dpi = 1200
 # )
 
