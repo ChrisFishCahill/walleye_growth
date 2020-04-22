@@ -192,17 +192,17 @@ Combined$WhichModel <- rep(c("ar1 st", "by lake"),
 Combined$WhichModel <- factor(Combined$WhichModel, levels = c(rep(c("ar1 st", "by lake"))))
 
 Combined$WhichVariable <- rep(c(
-  "omega[0]", "beta[1] ~ Intraspecific ~ Density",
-  "beta[2] ~ Interspecific ~ Density",
+  "omega[0]", "beta[1] ~ Intraspecific ~ Dens",
+  "beta[2] ~ Interspecific ~ Dens",
   "beta[3] ~ GDD",
-  "beta[4] ~Density ~ Interaction"
+  "beta[4] ~Dens ~ Interaction"
 ), 2)
 
 Combined$WhichVariable <- factor(Combined$WhichVariable, levels = c(
-  "omega[0]", "beta[1] ~ Intraspecific ~ Density",
-  "beta[2] ~ Interspecific ~ Density",
+  "omega[0]", "beta[1] ~ Intraspecific ~ Dens",
+  "beta[2] ~ Interspecific ~ Dens",
   "beta[3] ~ GDD",
-  "beta[4] ~Density ~ Interaction"
+  "beta[4] ~Dens ~ Interaction"
 ))
 
 p <- ggplot() +
@@ -251,7 +251,7 @@ p <- p +
   legend.key = element_blank(),
   panel.grid.major = element_blank(),
   panel.grid.minor = element_blank(),
-  strip.text.x = element_text(size = 14, colour = "gray30"),
+  strip.text.x = element_text(size = 15, colour = "gray30"),
   strip.text = element_text(size=8))
 
 p <- p + labs(fill = "")
