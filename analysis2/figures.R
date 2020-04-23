@@ -777,3 +777,5 @@ not_surveyed = read.csv("analysis2/all_lakes.csv")
 
 devtools::source_url("https://raw.githubusercontent.com/ChrisFishCahill/fish-map/master/alberta-map.R")
 # alberta_map(data = data, filename = "analysis2/Fig_1_map", not_surveyed=not_surveyed)
+
+#-------------------------------
