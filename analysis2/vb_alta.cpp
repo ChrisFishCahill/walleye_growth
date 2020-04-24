@@ -137,6 +137,7 @@ Type objective_function<Type>::operator()()
   REPORT(rho);
   REPORT(omega_i);
   REPORT(pred_jnll);
+  REPORT(length_pred);
   return jnll;
 }
 

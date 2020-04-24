@@ -240,7 +240,7 @@ system.time({ # 7.4 minutes
     ))
 })
 
-# saveRDS(out, file = "analysis2/REML_fits.rds")
+saveRDS(out, file = "analysis2/REML_fits.rds")
 
 system.time({ # 22 minutes
   out <- furrr::future_pmap(tofit, get_fit,
