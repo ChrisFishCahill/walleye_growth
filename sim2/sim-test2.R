@@ -410,7 +410,7 @@ g <- out %>%
   ylab(expression(Estimated~omega[0])) +
   coord_cartesian(ylim = c(true_omega * 0.5, true_omega * 2)) +
   ggsidekick::theme_sleek()
-ggsave("sim2/simulations-facet-grid.pdf", width = 10, height = 6)
+#ggsave("sim2/simulations-facet-grid.pdf", width = 10, height = 6)
 
 true_omega <- exp(out$true_ln_global_omega)[1]
 g <-
@@ -431,12 +431,11 @@ g <-
   ylab(expression(Estimated~omega[0])) +
   coord_cartesian(ylim = c(true_omega * 0.5, true_omega * 2)) +
   ggsidekick::theme_sleek()
-ggsave("sim2/simulations-facet-grid-violin.pdf", width = 10, height = 6)
+#ggsave("sim2/simulations-facet-grid-violin.pdf", width = 10, height = 6)
 
 true_omega <- exp(out$true_ln_global_omega)[1]
 plot_dat <-
   out %>%
-  # out[sample(seq_len(nrow(out)), 6e3), ] %>%
   dplyr::filter(is.na(failed_iter)) %>%
   dplyr::mutate(Matched = sig_varies_fitted == sig_varies) %>%
   group_by(param, levels, Matched, sig_varies, sig_varies_fitted) %>%
@@ -465,7 +464,84 @@ g <- plot_dat %>% ggplot(aes(x = sig_varies, y = exp(med),
   ggsidekick::theme_sleek() +
   scale_shape_manual(values = c(19, 21)) +
   scale_y_log10(breaks = seq(8, 36, 2))
-ggsave("sim2/simulations-facet-grid-pointrange.pdf", width = 8, height = 5)
+#ggsave("sim2/simulations-facet-grid-pointrange.pdf", width = 8, height = 5)
+
+#------------------------------------------------
+#Examine bias using MRE:
+#Median(E(1:100) - T(1:100) / T(1:100))
+
+plot_dat <-
+  out %>%
+  dplyr::filter(is.na(failed_iter)) %>%
+  dplyr::mutate(Matched = sig_varies_fitted == sig_varies) %>%
+  group_by(param, levels, Matched, sig_varies, sig_varies_fitted) %>%
+  mutate(MRE = 100*(exp(ln_global_omega) - true_omega ) / true_omega)
+
+plot_dat <- plot_dat %>%
+  group_by(param, levels, Matched, sig_varies, sig_varies_fitted) %>%
+  summarise(
+    lwr = quantile(MRE, 0.1),
+    med = quantile(MRE, 0.50),
+    upr = quantile(MRE, 0.9),
+    lwr2 = quantile(MRE, 0.25),
+    upr2 = quantile(MRE, 0.75)
+    )
+
+g <- plot_dat %>% ggplot(aes(x = sig_varies, y = med,
+  colour = sig_varies_fitted, shape = Matched)) +
+  geom_hline(yintercept = 0, lty = 1, alpha = 0.6) +
+  geom_linerange(aes(ymin = lwr, ymax = upr), position = position_dodge(width = dodge_width), lwd = 0.4) +
+  geom_linerange(aes(ymin = lwr2, ymax = upr2), position = position_dodge(width = dodge_width), lwd = 0.8) +
+  geom_point(position = position_dodge(width = dodge_width), fill = "white", size = 2) +
+  facet_grid(vars(param), vars(levels), labeller = label_parsed) +
+  xlab(expression(Simulated ~ omega[0] ~ variation)) +
+  labs(colour = expression(Fitted ~ omega[0] ~ variation)) +
+  scale_color_brewer(palette = "Dark2") +
+  scale_fill_manual(values = c("white", "grey60")) +
+  ylab(expression(Median ~ relative ~ error ~ '%')) +
+  ggsidekick::theme_sleek() +
+  scale_shape_manual(values = c(19, 21))
+g
+
+#ggsave("sim2/simulations-facet-grid-pointrange-mre.pdf", width = 8, height = 5)
+
+#------------------------------------------------
+#Examine accuracy using MARE:
+#Median(abs(E(1:100) - T(1:100)) / T(1:100))
+
+plot_dat <-
+  out %>%
+  dplyr::filter(is.na(failed_iter)) %>%
+  dplyr::mutate(Matched = sig_varies_fitted == sig_varies) %>%
+  group_by(param, levels, Matched, sig_varies, sig_varies_fitted) %>%
+  mutate(MARE = 100*abs((exp(ln_global_omega) - true_omega ) / true_omega))
+
+plot_dat <- plot_dat %>%
+  group_by(param, levels, Matched, sig_varies, sig_varies_fitted) %>%
+  summarise(
+    lwr = quantile(MARE, 0.1),
+    med = quantile(MARE, 0.50),
+    upr = quantile(MARE, 0.9),
+    lwr2 = quantile(MARE, 0.25),
+    upr2 = quantile(MARE, 0.75)
+    )
+
+g <- plot_dat %>% ggplot(aes(x = sig_varies, y = med,
+  colour = sig_varies_fitted, shape = Matched)) +
+  geom_linerange(aes(ymin = lwr, ymax = upr), position = position_dodge(width = dodge_width), lwd = 0.4) +
+  geom_linerange(aes(ymin = lwr2, ymax = upr2), position = position_dodge(width = dodge_width), lwd = 0.8) +
+  geom_point(position = position_dodge(width = dodge_width), fill = "white", size = 2) +
+  facet_grid(vars(param), vars(levels), labeller = label_parsed) +
+  xlab(expression(Simulated ~ omega[0] ~ variation)) +
+  labs(colour = expression(Fitted ~ omega[0] ~ variation)) +
+  scale_color_brewer(palette = "Dark2") +
+  scale_fill_manual(values = c("white", "grey60")) +
+  ylab(expression(Median ~ absolute ~ relative ~ error ~ '%')) +
+  ggsidekick::theme_sleek() +
+  scale_shape_manual(values = c(19, 21))
+g
+
+#ggsave("sim2/simulations-facet-grid-pointrange-mare.pdf", width = 8, height = 5)
 
 # Extra plotting code to plot each panel as separate .pdf:
 #
