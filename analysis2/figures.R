@@ -301,20 +301,20 @@ t_col <- function(color, percent = 50, name = NULL) {
   invisible(t.col)
 }
 
-colfunc <- colorRampPalette(c("navy", "darkorange1"))
-plot(rep(1:30), col = colfunc(30), pch = 19, cex = 3)
-red_col <- colfunc(30)[29]
-blue_col <- colfunc(30)[6]
+# colfunc <- colorRampPalette(c('#af8dc3', '#7fbf7b'))
+# plot(rep(1:30), col = colfunc(30), pch = 19, cex = 3)
+# red_col <- colfunc(30)[29]
+# blue_col <- colfunc(30)[6]
 
-mycol1 <- t_col(blue_col, perc = 40, name = "lt.blue")
-mycol2 <- t_col(red_col, perc = 60, name = "lt.red")
+mycol1 <- t_col('#af8dc3', perc = 0, name = "lt.blue")
+mycol2 <- t_col('#7fbf7b', perc = 0, name = "lt.red")
 
-mycol3 <- t_col(blue_col, perc = 15, name = "lt.blue")
-mycol4 <- t_col(red_col, perc = 15, name = "lt.red")
+mycol3 <- t_col('#af8dc3', perc = 0, name = "lt.blue")
+mycol4 <- t_col('#7fbf7b', perc = 0, name = "lt.red")
 
-png("analysis2/Fig_5_orange_blue.png",
-  width = 8, height = 6, units = "in", res = 1200
-)
+# png("analysis2/Fig_5_brewer.png",
+#  width = 8, height = 6, units = "in", res = 1200
+# )
 
 par(mfrow = c(1, 1), mar = c(4, 4, 2, 2))
 plot(data$FL ~ data$Age,
@@ -364,7 +364,7 @@ lines(Ages, Lpreds, lty = 1, lwd = 4, col = mycol3)
 Lpreds <- exp(ln_global_linf + ln_b_sex) * (1 - exp(-(exp(b_j_omega[1]) / exp(ln_global_linf + ln_b_sex)) * (Ages - t0)))
 lines(Ages, Lpreds, lty = 1, lwd = 4, col = mycol4)
 
-dev.off()
+# dev.off()
 
 #---------------------
 # Figure 6 growth predictions in space-time
@@ -402,11 +402,14 @@ p <- ggplot(NULL) +
   geom_point(pch = 21, size = 2.0, data = d, aes(Long_c, Lat_c, fill = mu)) +
   scale_x_continuous(breaks = c(-120, -115, -110)) +
   scale_y_continuous(breaks = c(49, 52, 56, 60)) +
-  scale_fill_gradient2(
+  scale_fill_gradientn(
+    #colours = c('#af8dc3','white','#7fbf7b'),
+    colours = c('#7b3294','#c2a5cf','white','#a6dba0','#008837'),
     # low = "steelblue", high = "darkorange1",
-    midpoint = exp(b_j_omega[1]),
-    high = "darkorange1", # scales::muted("red"),
-    low = "navy", # scales::muted("blue"),
+    #midpoint = exp(b_j_omega[1]),
+    values = c(1, 0.5, 0.35, 0.1, 0), #quantile(d$mu, c(0.25, 0.5, 0.75)),
+    #high = "#af8dc3", # scales::muted("red"),
+    #low = "#7fbf7b", # scales::muted("blue"),
     name = bquote(atop(Growth ~ Rate ~ bold((omega)), ~ cm %.% year^{
       -1
     }))
@@ -437,9 +440,9 @@ p <- p + ggsidekick::theme_sleek() +
     panel.spacing.y = unit(0.5, "lines"),
     panel.border = element_blank()
   )
-# p
-# ggsave("analysis2/Fig_6_red_blue.png",
-#         p, dpi=1200, width=11, height=8, units=c("in"))
+p
+ggsave("analysis2/Fig_6_brewer5.png",
+      p, dpi=1200, width=11, height=8, units=c("in"))
 
 # ggsave("analysis2/Fig_6_orange_blue.png",
 #        p, dpi=1200, width=11, height=8, units=c("in"))
@@ -486,185 +489,185 @@ abline(v = Range, lty = 2, cex = 1, col = "black")
 # dev.off()
 
 #-------------------------------
-# Behemoth misery multipanel plot (i.e., figure 4)
+# Behemoth misery multipanel plot (i.e., no longer included in ms)
 # Make the ar1 st plot:
-t0 <- reml$`ar1 st reduced`$rep$par.random["global_tzero"]
-eps_t0 <- reml$`ar1 st reduced`$rep$par.random[which(names(reml$`ar1 st reduced`$rep$par.random) == "eps_t0")]
-ln_global_linf <- reml$`ar1 st reduced`$rep$par.random["ln_global_linf"]
-eps_linf <- reml$`ar1 st reduced`$rep$par.random[which(names(reml$`ar1 st reduced`$rep$par.random) == "eps_linf")]
-ln_b_sex <- reml$`ar1 st reduced`$rep$par.random["ln_b_sex"]
-b_j_omega <- reml$`ar1 st reduced`$rep$par.random[which(names(reml$`ar1 st reduced`$rep$par.random) == "b_j_omega")]
-log_sd <- reml$`ar1 st reduced`$opt$par["log_sd"]
-eps_st <- reml$`ar1 st reduced`$rep$par.random[which(names(reml$`ar1 st reduced`$rep$par.random) == "eps_omega_st")]
-eps_st <- matrix(eps_st, nrow = mesh$n, ncol = length(unique(data$Year)))
-data$eps <- NA
-
-data$eps <- purrr::map_dbl(1:nrow(data), function(i) {
-  eps_st[data$Lake[i], data$Year[i]]
-})
-
-y_reduced_spatial <- purrr::map_dbl(1:nrow(data), function(i) {
-  b_j_omega[2] * data$wallEffDen.Std[i] + data$eps[i]
-})
-
-y_full_spatial <- purrr::map_dbl(1:nrow(data), function(i) {
-  b_j_omega[1] +
-    b_j_omega[2] * data$wallEffDen.Std[i] +
-    b_j_omega[3] * data$compEffDen.Std[i] +
-    b_j_omega[4] * data$GDD.Std[i] +
-    data$eps[i]
-})
-
-data$pres_spatial <- y_full_spatial - y_reduced_spatial
-plot(data$pres_spatial ~ data$wallEffDen.Std)
-data$Block <- as.factor(data$Block)
-p <- ggplot() +
-  theme_classic()
-p <- p +
-  ggforce::geom_mark_ellipse(
-    data = data[data$Block %in% c("6"), ],
-    aes(y = pres_spatial, x = wallEffDen.Std),
-    expand = unit(3, "mm"), lty = "dotted"
-  ) +
-  geom_point(
-    data = data,
-    aes(y = pres_spatial, x = wallEffDen.Std, fill = Block),
-    size = 2, pch = 21
-  )
-
-p <- p + ggtitle("ar1 st") + ylim(2.5, 2.8)
-p <- p + scale_fill_manual(values = RColorBrewer::brewer.pal(7, "Dark2"), name = "Spatial \n Block")
-p <- p + ylab(expression(paste(paste("Log Growth Rate ", cm %.% year^{
-  -1
-}), (omega)))) +
-  xlab("Intraspecific Density (Standardized)")
-p <- p + theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5))
-p <- p + geom_abline(
-  slope = b_j_omega[2], intercept = b_j_omega[1],
-  linetype = 1, size = 0.5, colour = "black"
-)
-p <- p + geom_abline(
-  slope = 0, intercept = b_j_omega[1],
-  linetype = 2, size = 0.5, colour = "black"
-)
-
-p <- p + ggsidekick::theme_sleek() + theme(legend.position = "none")
-
-p <- p + scale_x_continuous(breaks = c(-1.0, -0.5, 0.0, 0.5, 1.0, 1.5))
-p
-
-# Make the `by lake` plot
-t0 <- reml$`by lake reduced`$rep$par.random["global_tzero"]
-eps_t0 <- reml$`by lake reduced`$rep$par.random[which(names(reml$`by lake reduced`$rep$par.random) == "eps_t0")]
-ln_global_linf <- reml$`by lake reduced`$rep$par.random["ln_global_linf"]
-eps_linf <- reml$`by lake reduced`$rep$par.random[which(names(reml$`by lake reduced`$rep$par.random) == "eps_linf")]
-ln_b_sex <- reml$`by lake reduced`$rep$par.random["ln_b_sex"]
-b_j_omega <- reml$`by lake reduced`$rep$par.random[which(names(reml$`by lake reduced`$rep$par.random) == "b_j_omega")]
-log_sd <- reml$`by lake reduced`$opt$par["log_sd"]
-eps_omega_lake <- reml$`by lake reduced`$rep$par.random[which(names(reml$`by lake reduced`$rep$par.random) == "eps_omega_lake")]
-data$eps_omega_i <- NA
-
-data$eps_omega_i <- purrr::map_dbl(1:nrow(data), function(i) {
-  eps_omega_lake[data$Lake[i]]
-})
-
-y_reduced_by_lake <- purrr::map_dbl(1:nrow(data), function(i) {
-  b_j_omega[2] * data$wallEffDen.Std[i] + data$eps_omega_i[i]
-})
-
-y_full_by_lake <- purrr::map_dbl(1:nrow(data), function(i) {
-  b_j_omega[1] +
-    b_j_omega[2] * data$wallEffDen.Std[i] +
-    b_j_omega[3] * data$compEffDen.Std[i] +
-    b_j_omega[4] * data$GDD.Std[i] +
-    data$eps_omega_i[i]
-})
-
-data$pres_by_lake <- y_full_by_lake - y_reduced_by_lake
-plot(data$pres_by_lake ~ data$wallEffDen.Std)
-data$Block <- as.factor(data$Block)
-p1 <- ggplot() +
-  theme_classic()
-p1 <- p1 + geom_point(
-  data = data,
-  aes(y = pres_by_lake, x = wallEffDen.Std, fill = Block),
-  size = 2, pch = 21
-)
-
-p1 <- p1 + ggtitle("by lake") + ylim(2.5, 2.8)
-p1 <- p1 + scale_fill_manual(values = RColorBrewer::brewer.pal(7, "Dark2"), name = "Spatial \n Block")
-p1 <- p1 + ylab(expression(paste(paste("Log Growth Rate ", cm %.% year^{
-  -1
-}), (omega)))) +
-  xlab("Intraspecific Density (Standardized)")
-p1 <- p1 + theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5)) # , legend.position="none")
-p1 <- p1 + geom_abline(
-  slope = b_j_omega[2], intercept = b_j_omega[1],
-  linetype = 1, size = 0.5, colour = "black"
-)
-p1 <- p1 + geom_abline(
-  slope = 0, intercept = b_j_omega[1],
-  linetype = 2, size = 0.5, colour = "black"
-)
-
-p1 <- p1 + ggsidekick::theme_sleek() + theme(legend.position = "none")
-
-p1 <- p1 + scale_x_continuous(breaks = c(-1.0, -0.5, 0.0, 0.5, 1.0, 1.5))
-p1
-p
-
-# Plot the spatial blocks:
-
-can1 <- raster::getData("GADM", country = "CAN", level = 1)
-alta <- can1[can1$NAME_1 %in% "Alberta", ]
-
-plot(alta)
-points(data$Long_c, data$Lat_c)
-
-alta <- can1[can1$NAME_1 %in% "Alberta", ]
-str(alta)
-class(alta)
-
-alta <- spTransform(
-  alta,
-  CRS("+proj=longlat +datum=WGS84")
-)
-alta.fort <- fortify(alta)
-
-names(alta.fort)[1] <- "Long_c"
-names(alta.fort)[2] <- "Lat_c"
-
-map <- ggplot(NULL) +
-  theme_classic() +
-  geom_polygon(colour = "black", fill = "white", data = alta.fort, aes(x = Long_c, y = Lat_c, group = id)) +
-  ggforce::geom_mark_ellipse(
-    data = data[data$Block %in% c("6"), ],
-    aes(Long_c, Lat_c),
-    expand = unit(2, "mm"), lty = "dotted"
-  ) +
-  geom_point(pch = 21, size = 2.0, data = data, aes(Long_c, Lat_c, fill = as.factor(Block))) +
-  scale_fill_manual(values = RColorBrewer::brewer.pal(7, "Dark2"), name = "Spatial \n Block") +
-  scale_x_continuous(breaks = c(-120, -115, -110)) +
-  scale_y_continuous(breaks = c(49, 52, 56, 60))
-
-map <- map +
-  ylab("Latitude") + xlab("Longitude") +
-  theme(
-    axis.title = element_text(size = 15),
-    axis.text = element_text(size = 12),
-    strip.background = element_blank(),
-    strip.text.x = element_blank(),
-    panel.spacing.x = unit(1, "lines"),
-    panel.spacing.y = unit(0.5, "lines")
-  )
-
-map <- map + ggalt::coord_proj(
-  paste0(CRS("+proj=tmerc +lat_0=0 +lon_0=-115 +k=0.9992 +x_0=500000 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs "))
-)
-
-map <- map + ggsidekick::theme_sleek()
-
-big <- ggarrange(ggarrange(p, p1, ncol = 1, nrow = 2), map, widths = c(1, 1))
+# t0 <- reml$`ar1 st reduced`$rep$par.random["global_tzero"]
+# eps_t0 <- reml$`ar1 st reduced`$rep$par.random[which(names(reml$`ar1 st reduced`$rep$par.random) == "eps_t0")]
+# ln_global_linf <- reml$`ar1 st reduced`$rep$par.random["ln_global_linf"]
+# eps_linf <- reml$`ar1 st reduced`$rep$par.random[which(names(reml$`ar1 st reduced`$rep$par.random) == "eps_linf")]
+# ln_b_sex <- reml$`ar1 st reduced`$rep$par.random["ln_b_sex"]
+# b_j_omega <- reml$`ar1 st reduced`$rep$par.random[which(names(reml$`ar1 st reduced`$rep$par.random) == "b_j_omega")]
+# log_sd <- reml$`ar1 st reduced`$opt$par["log_sd"]
+# eps_st <- reml$`ar1 st reduced`$rep$par.random[which(names(reml$`ar1 st reduced`$rep$par.random) == "eps_omega_st")]
+# eps_st <- matrix(eps_st, nrow = mesh$n, ncol = length(unique(data$Year)))
+# data$eps <- NA
+#
+# data$eps <- purrr::map_dbl(1:nrow(data), function(i) {
+#   eps_st[data$Lake[i], data$Year[i]]
+# })
+#
+# y_reduced_spatial <- purrr::map_dbl(1:nrow(data), function(i) {
+#   b_j_omega[2] * data$wallEffDen.Std[i] + data$eps[i]
+# })
+#
+# y_full_spatial <- purrr::map_dbl(1:nrow(data), function(i) {
+#   b_j_omega[1] +
+#     b_j_omega[2] * data$wallEffDen.Std[i] +
+#     b_j_omega[3] * data$compEffDen.Std[i] +
+#     b_j_omega[4] * data$GDD.Std[i] +
+#     data$eps[i]
+# })
+#
+# data$pres_spatial <- y_full_spatial - y_reduced_spatial
+# plot(data$pres_spatial ~ data$wallEffDen.Std)
+# data$Block <- as.factor(data$Block)
+# p <- ggplot() +
+#   theme_classic()
+# p <- p +
+#   ggforce::geom_mark_ellipse(
+#     data = data[data$Block %in% c("6"), ],
+#     aes(y = pres_spatial, x = wallEffDen.Std),
+#     expand = unit(3, "mm"), lty = "dotted"
+#   ) +
+#   geom_point(
+#     data = data,
+#     aes(y = pres_spatial, x = wallEffDen.Std, fill = Block),
+#     size = 2, pch = 21
+#   )
+#
+# p <- p + ggtitle("ar1 st") + ylim(2.5, 2.8)
+# p <- p + scale_fill_manual(values = RColorBrewer::brewer.pal(7, "Dark2"), name = "Spatial \n Block")
+# p <- p + ylab(expression(paste(paste("Log Growth Rate ", cm %.% year^{
+#   -1
+# }), (omega)))) +
+#   xlab("Intraspecific Density (Standardized)")
+# p <- p + theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5))
+# p <- p + geom_abline(
+#   slope = b_j_omega[2], intercept = b_j_omega[1],
+#   linetype = 1, size = 0.5, colour = "black"
+# )
+# p <- p + geom_abline(
+#   slope = 0, intercept = b_j_omega[1],
+#   linetype = 2, size = 0.5, colour = "black"
+# )
+#
+# p <- p + ggsidekick::theme_sleek() + theme(legend.position = "none")
+#
+# p <- p + scale_x_continuous(breaks = c(-1.0, -0.5, 0.0, 0.5, 1.0, 1.5))
+# p
+#
+# # Make the `by lake` plot
+# t0 <- reml$`by lake reduced`$rep$par.random["global_tzero"]
+# eps_t0 <- reml$`by lake reduced`$rep$par.random[which(names(reml$`by lake reduced`$rep$par.random) == "eps_t0")]
+# ln_global_linf <- reml$`by lake reduced`$rep$par.random["ln_global_linf"]
+# eps_linf <- reml$`by lake reduced`$rep$par.random[which(names(reml$`by lake reduced`$rep$par.random) == "eps_linf")]
+# ln_b_sex <- reml$`by lake reduced`$rep$par.random["ln_b_sex"]
+# b_j_omega <- reml$`by lake reduced`$rep$par.random[which(names(reml$`by lake reduced`$rep$par.random) == "b_j_omega")]
+# log_sd <- reml$`by lake reduced`$opt$par["log_sd"]
+# eps_omega_lake <- reml$`by lake reduced`$rep$par.random[which(names(reml$`by lake reduced`$rep$par.random) == "eps_omega_lake")]
+# data$eps_omega_i <- NA
+#
+# data$eps_omega_i <- purrr::map_dbl(1:nrow(data), function(i) {
+#   eps_omega_lake[data$Lake[i]]
+# })
+#
+# y_reduced_by_lake <- purrr::map_dbl(1:nrow(data), function(i) {
+#   b_j_omega[2] * data$wallEffDen.Std[i] + data$eps_omega_i[i]
+# })
+#
+# y_full_by_lake <- purrr::map_dbl(1:nrow(data), function(i) {
+#   b_j_omega[1] +
+#     b_j_omega[2] * data$wallEffDen.Std[i] +
+#     b_j_omega[3] * data$compEffDen.Std[i] +
+#     b_j_omega[4] * data$GDD.Std[i] +
+#     data$eps_omega_i[i]
+# })
+#
+# data$pres_by_lake <- y_full_by_lake - y_reduced_by_lake
+# plot(data$pres_by_lake ~ data$wallEffDen.Std)
+# data$Block <- as.factor(data$Block)
+# p1 <- ggplot() +
+#   theme_classic()
+# p1 <- p1 + geom_point(
+#   data = data,
+#   aes(y = pres_by_lake, x = wallEffDen.Std, fill = Block),
+#   size = 2, pch = 21
+# )
+#
+# p1 <- p1 + ggtitle("by lake") + ylim(2.5, 2.8)
+# p1 <- p1 + scale_fill_manual(values = RColorBrewer::brewer.pal(7, "Dark2"), name = "Spatial \n Block")
+# p1 <- p1 + ylab(expression(paste(paste("Log Growth Rate ", cm %.% year^{
+#   -1
+# }), (omega)))) +
+#   xlab("Intraspecific Density (Standardized)")
+# p1 <- p1 + theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5)) # , legend.position="none")
+# p1 <- p1 + geom_abline(
+#   slope = b_j_omega[2], intercept = b_j_omega[1],
+#   linetype = 1, size = 0.5, colour = "black"
+# )
+# p1 <- p1 + geom_abline(
+#   slope = 0, intercept = b_j_omega[1],
+#   linetype = 2, size = 0.5, colour = "black"
+# )
+#
+# p1 <- p1 + ggsidekick::theme_sleek() + theme(legend.position = "none")
+#
+# p1 <- p1 + scale_x_continuous(breaks = c(-1.0, -0.5, 0.0, 0.5, 1.0, 1.5))
+# p1
+# p
+#
+# # Plot the spatial blocks:
+#
+# can1 <- raster::getData("GADM", country = "CAN", level = 1)
+# alta <- can1[can1$NAME_1 %in% "Alberta", ]
+#
+# plot(alta)
+# points(data$Long_c, data$Lat_c)
+#
+# alta <- can1[can1$NAME_1 %in% "Alberta", ]
+# str(alta)
+# class(alta)
+#
+# alta <- spTransform(
+#   alta,
+#   CRS("+proj=longlat +datum=WGS84")
+# )
+# alta.fort <- fortify(alta)
+#
+# names(alta.fort)[1] <- "Long_c"
+# names(alta.fort)[2] <- "Lat_c"
+#
+# map <- ggplot(NULL) +
+#   theme_classic() +
+#   geom_polygon(colour = "black", fill = "white", data = alta.fort, aes(x = Long_c, y = Lat_c, group = id)) +
+#   ggforce::geom_mark_ellipse(
+#     data = data[data$Block %in% c("6"), ],
+#     aes(Long_c, Lat_c),
+#     expand = unit(2, "mm"), lty = "dotted"
+#   ) +
+#   geom_point(pch = 21, size = 2.0, data = data, aes(Long_c, Lat_c, fill = as.factor(Block))) +
+#   scale_fill_manual(values = RColorBrewer::brewer.pal(7, "Dark2"), name = "Spatial \n Block") +
+#   scale_x_continuous(breaks = c(-120, -115, -110)) +
+#   scale_y_continuous(breaks = c(49, 52, 56, 60))
+#
+# map <- map +
+#   ylab("Latitude") + xlab("Longitude") +
+#   theme(
+#     axis.title = element_text(size = 15),
+#     axis.text = element_text(size = 12),
+#     strip.background = element_blank(),
+#     strip.text.x = element_blank(),
+#     panel.spacing.x = unit(1, "lines"),
+#     panel.spacing.y = unit(0.5, "lines")
+#   )
+#
+# map <- map + ggalt::coord_proj(
+#   paste0(CRS("+proj=tmerc +lat_0=0 +lon_0=-115 +k=0.9992 +x_0=500000 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs "))
+# )
+#
+# map <- map + ggsidekick::theme_sleek()
+#
+# big <- ggarrange(ggarrange(p, p1, ncol = 1, nrow = 2), map, widths = c(1, 1))
 
 # ggsave("analysis2/Fig_4.png", big,
 #   dpi = 1200, width = 10, height = 6.5, units = c("in")
