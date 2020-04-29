@@ -193,7 +193,7 @@ get_fit <- function(Linf = 55, T0 = -1, SigO = 1.0, sd = 0.3,
   opt <- TMBhelper::fit_tmb(
     obj = obj,
     control = list(eval.max = 1000, iter.max = 1000),
-    getsd = F, newtonsteps = 1 # newtonsteps required for ML model convergence
+    getsd = T, newtonsteps = 1 # newtonsteps required for ML model convergence
   )
   rep <- TMB::sdreport(obj, bias.correct = TRUE)
   final_gradient <- obj$gr(opt$par)
@@ -240,7 +240,7 @@ system.time({ # 7.4 minutes
     ))
 })
 
-# saveRDS(out, file = "analysis2/REML_fits.rds")
+saveRDS(out, file = "analysis2/REML_fits.rds")
 
 system.time({ # 22 minutes
   out <- furrr::future_pmap(tofit, get_fit,
